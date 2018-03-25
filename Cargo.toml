@@ -1,0 +1,9 @@
+[package]
+name = "quartz"
+version = "0.1.0"
+authors = ["wingerse <aiman012@live.com>"]
+
+[dependencies]
+byteorder = "1.2.1"
+#failure = "0.1.1"
+#failure_derive = "0.1.1"
