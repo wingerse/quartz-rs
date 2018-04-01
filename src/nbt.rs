@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fmt;
 use std::string::FromUtf8Error;
 
@@ -11,7 +11,7 @@ fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
     w.write_all(s.as_bytes())
 }
 
-fn read_string<R: Read>(r: &mut R) -> Result<String, NbtError> {
+fn read_string<R: Read>(r: &mut R) -> Result<String, Error> {
     let len = binary::read_ushort(r)?;
     let mut buf = Vec::with_capacity(len as usize);
     r.read_exact(&mut buf)?;
@@ -21,60 +21,41 @@ fn read_string<R: Read>(r: &mut R) -> Result<String, NbtError> {
 
 const MAX_NEXT_LEVEL: u32 = 512;
 
-#[derive(Debug)]
-pub enum NbtError {
-    ByteArrayNegativeLength(i32),
-    InvalidUtfEncodedString,
-    MaxNestLevelReached(u32),
-    IntArrayNegativeLength(i32),
-    InvalidID(u8),
-    NotACompoundID(u8),
-    IOErr(io::Error),
-}
-
-impl fmt::Display for NbtError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            NbtError::ByteArrayNegativeLength(x) => {
-                write!(f, "Byte array with negative length: {}", x)
-            }
-            NbtError::InvalidUtfEncodedString => write!(f, "Invalid utf encoded string"),
-            NbtError::MaxNestLevelReached(x) => write!(f, "Max nest level allowed reached: {}", x),
-            NbtError::IntArrayNegativeLength(x) => {
-                write!(f, "Int array with negative length: {}", x)
-            }
-            NbtError::InvalidID(x) => write!(f, "Tag with invalid ID: {}", x),
-            NbtError::NotACompoundID(x) => write!(f, "Root tag is not a compound. Got id: {}", x),
-            NbtError::IOErr(ref e) => e.fmt(f),
+quick_error! {
+    #[derive(Debug)]
+    pub enum Error {
+        ByteArrayNegativeLength(err: i32) {
+            description("byte array with negative length")
+            display(me) -> ("{}: {}", me.description(), err)
         }
-    }
-}
-
-impl Error for NbtError {
-    fn description(&self) -> &str {
-        match *self {
-            NbtError::IOErr(ref e) => e.description(),
-            _ => "Nbt Error",
+        InvalidUtf8String(err: FromUtf8Error) {
+            description(err.description())
+            display("invalid utf8 string: {}", err)
+            from()
+            cause(err)
         }
-    }
-
-    fn cause(&self) -> Option<&Error> {
-        match *self {
-            NbtError::IOErr(ref e) => Some(e),
-            _ => None,
+        MaxNestLevelReached(err: u32) {
+            description("max nest level allowed reached")
+            display(me) -> ("{}: {}", me.description(), err)
         }
-    }
-}
-
-impl From<io::Error> for NbtError {
-    fn from(err: io::Error) -> Self {
-        NbtError::IOErr(err)
-    }
-}
-
-impl From<FromUtf8Error> for NbtError {
-    fn from(_: FromUtf8Error) -> Self {
-        NbtError::InvalidUtfEncodedString
+        IntArrayNegativeLength(err: i32) {
+            description("int array with negative length")
+            display(me) -> ("{}: {}", me.description(), err)
+        }
+        InvalidID(err: u8) {
+            description("tag with invalid ID")
+            display(me) -> ("{}: {}", me.description(), err)
+        }
+        NotACompoundID(err: u8) {
+            description("root tag is not a compound")
+            display(me) -> ("{}, got: {}", me.description(), err)
+        }
+        IOErr(err: io::Error) {
+            description(err.description())
+            display("io error: {}", err)
+            from()
+            cause(err)
+        }
     }
 }
 
@@ -155,7 +136,7 @@ impl Tag {
         Ok(())
     }
 
-    fn read<R: Read>(id: u8, r: &mut R, mut level: u32) -> Result<Tag, NbtError> {
+    fn read<R: Read>(id: u8, r: &mut R, mut level: u32) -> Result<Tag, Error> {
         match id {
             1 => Ok(Tag::Byte(binary::read_byte(r)?)),
             2 => Ok(Tag::Short(binary::read_ishort(r)?)),
@@ -166,7 +147,7 @@ impl Tag {
             7 => {
                 let len = binary::read_int(r)?;
                 if len < 0 {
-                    return Err(NbtError::ByteArrayNegativeLength(len));
+                    return Err(Error::ByteArrayNegativeLength(len));
                 }
                 let mut v = Vec::<u8>::with_capacity(len as usize);
                 r.read_exact(&mut v)?;
@@ -176,7 +157,7 @@ impl Tag {
             9 => {
                 level += 1;
                 if level > MAX_NEXT_LEVEL {
-                    return Err(NbtError::MaxNestLevelReached(level));
+                    return Err(Error::MaxNestLevelReached(level));
                 }
 
                 let id = binary::read_ubyte(r)?;
@@ -194,7 +175,7 @@ impl Tag {
             10 => {
                 level += 1;
                 if level > MAX_NEXT_LEVEL {
-                    return Err(NbtError::MaxNestLevelReached(level));
+                    return Err(Error::MaxNestLevelReached(level));
                 }
 
                 let mut compound = HashMap::new();
@@ -214,7 +195,7 @@ impl Tag {
             11 => {
                 let len = binary::read_int(r)?;
                 if len < 0 {
-                    return Err(NbtError::IntArrayNegativeLength(len));
+                    return Err(Error::IntArrayNegativeLength(len));
                 }
                 let mut v = Vec::with_capacity(len as usize);
                 
@@ -223,11 +204,12 @@ impl Tag {
                 }
                 Ok(Tag::IntArray(v))
             },
-            _ => Err(NbtError::InvalidID(id)),
+            _ => Err(Error::InvalidID(id)),
         }
     }
 }
 
+#[derive(Debug)]
 pub struct NBT(Option<(String, Tag)>);
 
 impl NBT {
@@ -242,13 +224,13 @@ impl NBT {
         }
     }
 
-    pub fn read<R: Read>(r: &mut R) -> Result<NBT, NbtError> {
+    pub fn read<R: Read>(r: &mut R) -> Result<NBT, Error> {
         let id = binary::read_ubyte(r)?;
         if id == 0 {
             return Ok(NBT(None));
         }
         if id != 10 {
-            return Err(NbtError::NotACompoundID(id));
+            return Err(Error::NotACompoundID(id));
         }
 
         let name = read_string(r)?;

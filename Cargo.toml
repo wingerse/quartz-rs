@@ -5,8 +5,8 @@ authors = ["wingerse <aiman012@live.com>"]
 
 [dependencies]
 byteorder = "1.2.1"
-#failure = "0.1.1"
-#failure_derive = "0.1.1"
 serde = "1.0.35"
 serde_json = "1.0.13"
 serde_derive = "1.0.35"
+quick-error = "1.2.1"
+uuid = "0.6.2"

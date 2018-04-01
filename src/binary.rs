@@ -76,44 +76,23 @@ pub fn read_double<R: Read>(r: &mut R) -> io::Result<f64> {
     r.read_f64::<BigEndian>()
 }
 
-#[derive(Debug)]
-pub enum VarintError {
-    TooLarge,
-    IOErr(io::Error),
-}
-
-impl fmt::Display for VarintError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            VarintError::TooLarge => write!(f, "Varint or varlong is too large"),
-            VarintError::IOErr(ref e) => e.fmt(f),
+quick_error! {
+    #[derive(Debug)]
+    pub enum VarintError {
+        TooLarge {
+            description("varint or varlong too large")
         }
-    }
-}
-
-impl Error for VarintError {
-    fn description(&self) -> &str {
-        match *self {
-            VarintError::TooLarge => "Varint Error",
-            VarintError::IOErr(ref e) => e.description(),
+        IOErr(err: io::Error) {
+            description(err.description())
+            display("io error: {}", err)
+            from()
+            cause(err)
         }
     }
 
-    fn cause(&self) -> Option<&Error> {
-        match *self {
-            VarintError::TooLarge => None,
-            VarintError::IOErr(ref e) => Some(e),
-        }
-    }
 }
 
-impl From<io::Error> for VarintError {
-    fn from(err: io::Error) -> Self {
-        VarintError::IOErr(err)
-    }
-}
-
-fn write_varint<W: Write>(w: &mut W, x: i32) -> io::Result<()> {
+pub fn write_varint<W: Write>(w: &mut W, x: i32) -> io::Result<()> {
     let mut x = x as u32;
     let mut buf = [0u8; 5];
 
@@ -129,7 +108,7 @@ fn write_varint<W: Write>(w: &mut W, x: i32) -> io::Result<()> {
     w.write_all(&buf[..n])
 }
 
-fn read_varint<R: BufRead>(r: &mut R) -> Result<i32, VarintError> {
+pub fn read_varint<R: BufRead>(r: &mut R) -> Result<i32, VarintError> {
     let mut x: u32 = 0;
     let mut i = 0;
 
@@ -151,7 +130,7 @@ fn read_varint<R: BufRead>(r: &mut R) -> Result<i32, VarintError> {
     Ok(x as i32)
 }
 
-fn write_varlong<W: Write>(w: &mut W, x: i64) -> io::Result<()> {
+pub fn write_varlong<W: Write>(w: &mut W, x: i64) -> io::Result<()> {
     let mut x = x as u64;
     let mut buf = [0u8; 10];
 
@@ -167,7 +146,7 @@ fn write_varlong<W: Write>(w: &mut W, x: i64) -> io::Result<()> {
     w.write_all(&buf[..n])
 }
 
-fn read_varlong<R: BufRead>(r: &mut R) -> Result<i64, VarintError> {
+pub fn read_varlong<R: BufRead>(r: &mut R) -> Result<i64, VarintError> {
     let mut x: u64 = 0;
     let mut i = 0;
 

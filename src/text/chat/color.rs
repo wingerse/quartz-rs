@@ -27,7 +27,7 @@ pub enum Color {
     #[serde(rename = "red")]
     Red,
     #[serde(rename = "light_purple")]
-    Ping,
+    Pink,
     #[serde(rename = "yellow")]
     Yellow,
     #[serde(rename = "white")]
