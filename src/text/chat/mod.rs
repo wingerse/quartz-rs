@@ -2,7 +2,6 @@ use std::fmt;
 use std::convert::From;
 use serde::de::{Deserialize, Deserializer, SeqAccess, MapAccess, Visitor, self};
 use std::io;
-use std::error::Error as StdError;
 use serde_json;
 use proto;
 

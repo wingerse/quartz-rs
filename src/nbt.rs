@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::error::Error as StdError;
-use std::fmt;
 use std::string::FromUtf8Error;
 
 use binary;
@@ -13,7 +12,7 @@ fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
 
 fn read_string<R: Read>(r: &mut R) -> Result<String, Error> {
     let len = binary::read_ushort(r)?;
-    let mut buf = Vec::with_capacity(len as usize);
+    let mut buf = vec![0u8; len as usize];
     r.read_exact(&mut buf)?;
     let string = String::from_utf8(buf)?;
     Ok(string)
@@ -149,7 +148,7 @@ impl Tag {
                 if len < 0 {
                     return Err(Error::ByteArrayNegativeLength(len));
                 }
-                let mut v = Vec::<u8>::with_capacity(len as usize);
+                let mut v = vec![0u8; len as usize];
                 r.read_exact(&mut v)?;
                 Ok(Tag::ByteArray(v))
             }
@@ -167,8 +166,8 @@ impl Tag {
                 }
 
                 let mut v = Vec::with_capacity(len as usize);
-                for t in v.iter_mut() {
-                    *t = Tag::read(id, r, level)?;
+                for i in 0..len {
+                    v.push(Tag::read(id, r, level)?);
                 }
                 Ok(Tag::List(v))
             }
@@ -197,7 +196,7 @@ impl Tag {
                 if len < 0 {
                     return Err(Error::IntArrayNegativeLength(len));
                 }
-                let mut v = Vec::with_capacity(len as usize);
+                let mut v = vec![0i32; len as usize];
                 
                 for i in v.iter_mut() {
                     *i = binary::read_int(r)?;

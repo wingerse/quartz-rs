@@ -1,8 +1,14 @@
 use text::chat::Chat;
+use nbt::NBT;
 use text;
-use super::data;
+use super::{data, Result, State, Error};
 use uuid;
+use std::io;
+use binary::*;
+use serde_json;
+use std::io::Read;
 
+#[derive(Debug)]
 pub enum CPacket {
     Handshake {
         protocol_version: i32,
@@ -126,7 +132,7 @@ pub enum CPacket {
     PlaySpectate {
         target_player: uuid::Uuid,
     },
-    PlayResourcePackSend {
+    PlayResourcePackStatus {
         hash: String,
         result: i32,
     },
@@ -139,6 +145,179 @@ pub enum CPacket {
     },
 }
 
+impl CPacket {
+    pub fn read(r: &mut &[u8], state: State, id: i32) -> Result<Self> {
+        return match state {
+            State::Handshake => {
+                match id {
+                    0 => Ok(CPacket::Handshake {
+                            protocol_version: read_varint(r)?,
+                            server_address: data::read_string(r)?,
+                            server_port: read_ushort(r)?,
+                            next_state: read_varint(r)?,
+                    }),
+                    _ => Err(Error::InvalidPacketId(id))
+                }
+            },
+            State::Play => {
+                match id {
+                    0 => Ok(CPacket::PlayKeepAlive{id: read_varint(r)?}),
+                    1 => Ok(CPacket::PlayChatMessage{message: data::read_string(r)?}),
+                    2 => {
+                        let target = read_varint(r)?;
+                        let typ = read_varint(r)?;
+                        let data = match typ {
+                            0 => CPlayUseEntityData::Interact,
+                            1 => CPlayUseEntityData::Attack,
+                            2 => CPlayUseEntityData::InteractAt {
+                                target_x: read_float(r)?,
+                                target_y: read_float(r)?,
+                                target_z: read_float(r)?,
+                            },
+                            _ => CPlayUseEntityData::Unknown,
+                        };
+                        Ok(CPacket::PlayUseEntity{target, data})
+                    },
+                    3 => Ok(CPacket::PlayPlayer{on_ground: read_bool(r)?}),
+                    4 => Ok(CPacket::PlayPlayerPosition{
+                            x: read_double(r)?,
+                            feet_y: read_double(r)?,
+                            z: read_double(r)?,
+                            on_ground: read_bool(r)?,
+                    }),
+                    5 => Ok(CPacket::PlayPlayerLook {
+                            yaw: read_float(r)?,
+                            pitch: read_float(r)?,
+                            on_ground: read_bool(r)?,
+                    }),
+                    6 => Ok(CPacket::PlayPlayerPositionAndLook {
+                            x: read_double(r)?,
+                            feet_y: read_double(r)?,
+                            z: read_double(r)?,
+                            yaw: read_float(r)?,
+                            pitch: read_float(r)?,
+                            on_ground: read_bool(r)?,
+                    }),
+                    7 => Ok(CPacket::PlayPlayerDigging {
+                            status: read_byte(r)?,
+                            location: data::Position::read(r)?,
+                            face: read_byte(r)?,
+                    }),
+                    8 => Ok(CPacket::PlayPlayerBlockPlacement {
+                            location: data::Position::read(r)?,
+                            face: read_byte(r)?,
+                            held_item: data::SlotData::read(r)?,
+                            cursor_pos_x: read_byte(r)?,
+                            cursor_pos_y: read_byte(r)?,
+                            cursor_pos_z: read_byte(r)?,
+                    }),
+                    9 => Ok(CPacket::PlayHeldItemChange {
+                        slot: read_ishort(r)?,
+                    }),
+                    10 => Ok(CPacket::PlayAnimation{}),
+                    11 => Ok(CPacket::PlayEntityAction {
+                        entity_id: read_varint(r)?,
+                        action_id: read_varint(r)?,
+                        action_param: read_varint(r)?,
+                    }),
+                    12 => Ok(CPacket::PlaySteerVehicle {
+                        sideways: read_float(r)?,
+                        forward: read_float(r)?,
+                        flags: read_ubyte(r)?,
+                    }),
+                    13 => Ok(CPacket::PlayCloseWindow {
+                        window_id: read_ubyte(r)?,
+                    }),
+                    14 => Ok(CPacket::PlayClickWindow {
+                        window_id: read_ubyte(r)?,
+                        slot: read_ishort(r)?,
+                        button: read_byte(r)?,
+                        action_num: read_ishort(r)?,
+                        mode: read_byte(r)?,
+                        clicked_item: data::SlotData::read(r)?,
+                    }),
+                    15 => Ok(CPacket::PlayConfirmTransaction {
+                        window_id: read_byte(r)?,
+                        action_num: read_ishort(r)?,
+                        accepted: read_bool(r)?,
+                    }),
+                    16 => Ok(CPacket::PlayCreativeInventoryAction {
+                        slot: read_ishort(r)?,
+                        clicked_item: data::SlotData::read(r)?,
+                    }),
+                    17 => Ok(CPacket::PlayEnchantItem {
+                        window_id: read_byte(r)?,
+                        enchantment: read_byte(r)?,
+                    }),
+                    18 => Ok(CPacket::PlayUpdateSign {
+                        location: data::Position::read(r)?,
+                        line1: Chat::read_proto(r)?,
+                        line2: Chat::read_proto(r)?,
+                        line3: Chat::read_proto(r)?,
+                        line4: Chat::read_proto(r)?,
+                    }),
+                    19 => Ok(CPacket::PlayPlayerAbilities {
+                        flags: read_byte(r)?,
+                        flying_speed: read_float(r)?,
+                        walking_speed: read_float(r)?,
+                    }),
+                    20 => Ok(CPacket::PlayTabComplete {
+                        text: data::read_string(r)?,
+                        pos: {
+                            let has = read_bool(r)?;
+                            if has {
+                                Some(data::Position::read(r)?)
+                            } else {
+                                None
+                            }
+                        }
+                    }),
+                    21 => Ok(CPacket::PlayClientSettings {
+                        locale: data::read_string(r)?,
+                        view_distance: read_byte(r)?,
+                        chat_mode: read_byte(r)?,
+                        chat_colors: read_bool(r)?,
+                        displayed_skin_parts: read_ubyte(r)?,
+                    }),
+                    22 => Ok(CPacket::PlayClientStatus {
+                        action_id: read_varint(r)?,
+                    }),
+                    23 => Ok(CPacket::PlayPluginMessage {
+                        channel: data::read_string(r)?,
+                        data: {
+                            let mut vec = vec![0u8; r.len()];
+                            r.read_exact(&mut vec)?;
+                            vec
+                        }
+                    }),
+                    24 => Ok(CPacket::PlaySpectate {
+                        target_player: data::read_uuid(r)?,
+                    }),
+                    25 => Ok(CPacket::PlayResourcePackStatus {
+                        hash: data::read_string(r)?,
+                        result: read_varint(r)?,
+                    }),
+                    _ => Err(Error::InvalidPacketId(id))
+                }
+            },
+            State::Status => {
+                match id {
+                    0 => Ok(CPacket::StatusRequest{}),
+                    1 => Ok(CPacket::StatusPing {payload: read_long(r)?}),
+                    _ => Err(Error::InvalidPacketId(id))
+                }
+            },
+            State::Login => {
+                match id {
+                    0 => Ok(CPacket::LoginLoginStart {name: data::read_string(r)?}),
+                    _ => Err(Error::InvalidPacketId(id))
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum CPlayUseEntityData {
     Interact,
     Attack,
@@ -146,13 +325,15 @@ pub enum CPlayUseEntityData {
         target_x: f32,
         target_y: f32,
         target_z: f32,
-    }
+    },
+    Unknown
 }
 
+#[derive(Debug)]
 pub enum SPacket {
     PlayKeepAlive {
         id: i32,
-    }, 
+    },
     PlayJoinGame {
         entity_id: i32,
         gamemode: u8,
@@ -172,7 +353,7 @@ pub enum SPacket {
     },
     PlayEntityEquipment {
         entity_id: i32,
-        slot: i64,
+        slot: i16,
         item: data::SlotData,
     },
     PlaySpawnPosition {
@@ -193,12 +374,12 @@ pub enum SPacket {
         x: f64,
         y: f64,
         z: f64,
-        yaw: f64,
-        pitch: f64,
-        flags: u8,
+        yaw: f32,
+        pitch: f32,
+        flags: i8,
     },
     PlayHeldItemChange {
-        slot: u8,
+        slot: i8,
     },
     PlayUseBed {
         entity_id: i32,
@@ -225,17 +406,17 @@ pub enum SPacket {
     },
     PlaySpawnObject {
         entity_id: i32,
-        type: i8,
+        object_type: i8,
         x: f64,
         y: f64,
         z: f64,
         pitch: f64,
         yaw: f64,
-        data: Option<SPlaySpawnObjectData>
+        data: Option<SPlaySpawnObjectData>,
     },
     PlaySpawnMob {
         entity_id: i32,
-        type: u8,
+        mob_type: u8,
         x: f64,
         y: f64,
         z: f64,
@@ -369,8 +550,7 @@ pub enum SPacket {
     },
     PlayMapChunkBulk {
         sky_light_sent: bool,
-        data: Vec<SPlayMapChunkBulkData>,
-        chunks: Vec<data::GroundUpContinuous>,
+        chunks: Vec<(SPlayMapChunkBulkData, data::GroundUpContinuous)>,
     },
     PlayExplosion {
         x: f32,
@@ -415,7 +595,7 @@ pub enum SPacket {
     },
     PlaySpawnGlobalEntity {
         entity_id: i32,
-        type: u8,
+        entity_type: i8,
         x: f64,
         y: f64,
         z: f64,
@@ -465,7 +645,7 @@ pub enum SPacket {
     PlayUpdateBlockEntity {
         location: data::Position,
         action: u8,
-        nbt_data: nbt::NBT,
+        nbt_data: NBT,
     },
     PlayOpenSignEditor {
         location: data::Position,
@@ -474,6 +654,7 @@ pub enum SPacket {
         statistics: Vec<(&'static str, i32)>,
     },
     PlayPlayerListItem {
+        uuid: uuid::Uuid,
         players: Vec<SPlayPlayerListItemData>,
     },
     PlayPlayerAbilities {
@@ -536,7 +717,7 @@ pub enum SPacket {
     },
     PlayUpdateEntityNBT {
         entity_id: i32,
-        tag: nbt::NBT,
+        tag: NBT,
     },
     StatusResponse {
         data: SStatusResponseData,
@@ -552,7 +733,1073 @@ pub enum SPacket {
         username: String,
     },
     LoginSetCompression {
-        threashold: i32,
+        threshold: i32,
+    },
+}
+
+impl SPacket {
+    pub fn id(&self) -> i32 {
+        match *self {
+            SPacket::PlayKeepAlive { .. } => 1,
+            SPacket::PlayJoinGame { .. } => 2,
+            SPacket::PlayChatMessage { .. } => 3,
+            SPacket::PlayTimeUpdate { .. } => 4,
+            SPacket::PlayEntityEquipment { .. } => 5,
+            SPacket::PlaySpawnPosition { .. } => 6,
+            SPacket::PlayUpdateHealth { .. } => 7,
+            SPacket::PlayRespawn { .. } => 8,
+            SPacket::PlayPlayerPositionAndLook { .. } => 9,
+            SPacket::PlayHeldItemChange { .. } => 10,
+            SPacket::PlayUseBed { .. } => 11,
+            SPacket::PlayAnimation { .. } => 12,
+            SPacket::PlaySpawnPlayer { .. } => 13,
+            SPacket::PlayCollectItem { .. } => 14,
+            SPacket::PlaySpawnObject { .. } => 15,
+            SPacket::PlaySpawnMob { .. } => 16,
+            SPacket::PlaySpawnPainting { .. } => 17,
+            SPacket::PlaySpawnExperienceOrb { .. } => 18,
+            SPacket::PlayEntityVelocity { .. } => 19,
+            SPacket::PlayDestroyEntities { .. } => 20,
+            SPacket::PlayEntity { .. } => 21,
+            SPacket::PlayEntityRelativeMove { .. } => 22,
+            SPacket::PlayEntityLook { .. } => 23,
+            SPacket::PlayEntityLookAndRelativeMove { .. } => 24,
+            SPacket::PlayEntityTeleport { .. } => 25,
+            SPacket::PlayEntityHeadLook { .. } => 26,
+            SPacket::PlayEntityStatus { .. } => 27,
+            SPacket::PlayAttachEntity { .. } => 28,
+            SPacket::PlayEntityMetadata { .. } => 29,
+            SPacket::PlayEntityEffect { .. } => 30,
+            SPacket::PlayRemoveEntityEffect { .. } => 31,
+            SPacket::PlaySetExperience { .. } => 32,
+            SPacket::PlayEntityProperties { .. } => 33,
+            SPacket::PlayChunkData { .. } => 34,
+            SPacket::PlayMultiBlockChange { .. } => 35,
+            SPacket::PlayBlockChange { .. } => 36,
+            SPacket::PlayBlockAction { .. } => 37,
+            SPacket::PlayBlockBreakAnimation { .. } => 38,
+            SPacket::PlayMapChunkBulk { .. } => 39,
+            SPacket::PlayExplosion { .. } => 40,
+            SPacket::PlayEffect { .. } => 41,
+            SPacket::PlaySoundEffect { .. } => 42,
+            SPacket::PlayParticle { .. } => 43,
+            SPacket::PlayChangeGameState { .. } => 44,
+            SPacket::PlaySpawnGlobalEntity { .. } => 45,
+            SPacket::PlayOpenWindow { .. } => 46,
+            SPacket::PlayCloseWindow { .. } => 47,
+            SPacket::PlaySetSlot { .. } => 48,
+            SPacket::PlayWindowItems { .. } => 49,
+            SPacket::PlayWindowProperty { .. } => 50,
+            SPacket::PlayConfirmTransaction { .. } => 51,
+            SPacket::PlayUpdateSign { .. } => 52,
+            SPacket::PlayMap { .. } => 53,
+            SPacket::PlayUpdateBlockEntity { .. } => 54,
+            SPacket::PlayOpenSignEditor { .. } => 55,
+            SPacket::PlayStatistics { .. } => 56,
+            SPacket::PlayPlayerListItem { .. } => 57,
+            SPacket::PlayPlayerAbilities { .. } => 58,
+            SPacket::PlayTabComplete { .. } => 59,
+            SPacket::PlayScoreboardObjective { .. } => 60,
+            SPacket::PlayUpdateScore { .. } => 61,
+            SPacket::PlayDisplayScoreboard { .. } => 62,
+            SPacket::PlayTeams { .. } => 63,
+            SPacket::PlayPluginMessage { .. } => 64,
+            SPacket::PlayDisconnect { .. } => 65,
+            SPacket::PlayServerDifficulty { .. } => 67,
+            SPacket::PlayCombatEvent { .. } => 68,
+            SPacket::PlayCamera { .. } => 69,
+            SPacket::PlayWorldBorder { .. } => 70,
+            SPacket::PlayTitle { .. } => 71,
+            SPacket::PlaySetCompression { .. } => 72,
+            SPacket::PlayPlayerListHeaderAndFooter { .. } => 73,
+            SPacket::PlayResourcePackSend { .. } => 74,
+            SPacket::PlayUpdateEntityNBT { .. } => 75,
+            SPacket::StatusResponse { .. } => 0,
+            SPacket::StatusPong { .. } => 1,
+            SPacket::LoginDisconnect { .. } => 0,
+            SPacket::LoginLoginSuccess { .. } => 2,
+            SPacket::LoginSetCompression { .. } => 3,
+        }
+    }
+
+    pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+        match *self {
+            SPacket::PlayKeepAlive { id } => {
+                write_varint(w, id)?;
+            }
+            SPacket::PlayJoinGame {
+                entity_id,
+                gamemode,
+                dimension,
+                difficulty,
+                max_players,
+                level_type,
+                reduced_debug_info,
+            } => {
+                write_int(w, entity_id)?;
+                write_ubyte(w, gamemode)?;
+                write_byte(w, dimension)?;
+                write_ubyte(w, difficulty)?;
+                write_ubyte(w, max_players)?;
+                data::write_string(w, level_type)?;
+                write_bool(w, reduced_debug_info)?;
+            }
+            SPacket::PlayChatMessage {
+                ref message,
+                position,
+            } => {
+                message.write_proto(w)?;
+                write_byte(w, position)?;
+            }
+            SPacket::PlayTimeUpdate {
+                world_age,
+                time_of_day,
+            } => {
+                write_long(w, world_age)?;
+                write_long(w, time_of_day)?;
+            }
+            SPacket::PlayEntityEquipment {
+                entity_id,
+                slot,
+                ref item,
+            } => {
+                write_varint(w, entity_id)?;
+                write_ishort(w, slot)?;
+                item.write(w)?;
+            }
+            SPacket::PlaySpawnPosition { location } => {
+                location.write(w)?;
+            }
+            SPacket::PlayUpdateHealth {
+                health,
+                food,
+                food_saturation,
+            } => {
+                write_float(w, health)?;
+                write_varint(w, food)?;
+                write_float(w, food_saturation)?;
+            }
+            SPacket::PlayRespawn {
+                dimension,
+                difficulty,
+                gamemode,
+                level_type,
+            } => {
+                write_int(w, dimension)?;
+                write_ubyte(w, difficulty)?;
+                write_ubyte(w, gamemode)?;
+                data::write_string(w, level_type)?;
+            }
+            SPacket::PlayPlayerPositionAndLook {
+                x,
+                y,
+                z,
+                yaw,
+                pitch,
+                flags,
+            } => {
+                write_double(w, x)?;
+                write_double(w, y)?;
+                write_double(w, z)?;
+                write_float(w, yaw)?;
+                write_float(w, pitch)?;
+                write_byte(w, flags)?;
+            }
+            SPacket::PlayHeldItemChange { slot } => {
+                write_byte(w, slot)?;
+            }
+            SPacket::PlayUseBed {
+                entity_id,
+                location,
+            } => {
+                write_varint(w, entity_id)?;
+                location.write(w)?;
+            }
+            SPacket::PlayAnimation {
+                entity_id,
+                animation,
+            } => {
+                write_varint(w, entity_id)?;
+                write_ubyte(w, animation)?;
+            }
+            SPacket::PlaySpawnPlayer {
+                entity_id,
+                uuid,
+                x,
+                y,
+                z,
+                yaw,
+                pitch,
+                current_item,
+                ref metadata,
+            } => {
+                write_varint(w, entity_id)?;
+                data::write_uuid(w, &uuid)?;
+                write_int(w, double_to_fixed_point(x))?;
+                write_int(w, double_to_fixed_point(y))?;
+                write_int(w, double_to_fixed_point(z))?;
+                data::write_angle(w, yaw)?;
+                data::write_angle(w, pitch)?;
+                write_ishort(w, current_item)?;
+                metadata.write(w)?;
+            }
+            SPacket::PlayCollectItem {
+                collected_entity_id,
+                collector_entity_id,
+            } => {
+                write_varint(w, collected_entity_id)?;
+                write_varint(w, collector_entity_id)?;
+            }
+            SPacket::PlaySpawnObject {
+                entity_id,
+                object_type,
+                x,
+                y,
+                z,
+                pitch,
+                yaw,
+                ref data,
+            } => {
+                write_varint(w, entity_id)?;
+                write_byte(w, object_type)?;
+                write_int(w, double_to_fixed_point(x))?;
+                write_int(w, double_to_fixed_point(y))?;
+                write_int(w, double_to_fixed_point(z))?;
+                data::write_angle(w, pitch)?;
+                data::write_angle(w, yaw)?;
+                match *data {
+                    Some(ref x) => {
+                        write_int(w, x.data)?;
+                        write_ishort(w, x.velocity_x)?;
+                        write_ishort(w, x.velocity_y)?;
+                        write_ishort(w, x.velocity_z)?;
+                    }
+                    None => write_int(w, 0)?,
+                }
+            }
+            SPacket::PlaySpawnMob {
+                entity_id,
+                mob_type,
+                x,
+                y,
+                z,
+                yaw,
+                pitch,
+                head_pitch,
+                velocity_x,
+                velocity_y,
+                velocity_z,
+                ref metadata,
+            } => {
+                write_varint(w, entity_id)?;
+                write_ubyte(w, mob_type)?;
+                write_int(w, double_to_fixed_point(x))?;
+                write_int(w, double_to_fixed_point(y))?;
+                write_int(w, double_to_fixed_point(z))?;
+                data::write_angle(w, yaw)?;
+                data::write_angle(w, pitch)?;
+                data::write_angle(w, head_pitch)?;
+                write_ishort(w, velocity_x)?;
+                write_ishort(w, velocity_y)?;
+                write_ishort(w, velocity_z)?;
+                metadata.write(w)?;
+            }
+            SPacket::PlaySpawnPainting {
+                entity_id,
+                ref title,
+                location,
+                direction,
+            } => {
+                write_varint(w, entity_id)?;
+                data::write_string(w, title)?;
+                location.write(w)?;
+                write_ubyte(w, direction)?;
+            }
+            SPacket::PlaySpawnExperienceOrb {
+                entity_id,
+                x,
+                y,
+                z,
+                count,
+            } => {
+                write_varint(w, entity_id)?;
+                write_int(w, double_to_fixed_point(x))?;
+                write_int(w, double_to_fixed_point(y))?;
+                write_int(w, double_to_fixed_point(z))?;
+                write_ishort(w, count)?;
+            }
+            SPacket::PlayEntityVelocity {
+                entity_id,
+                velocity_x,
+                velocity_y,
+                velocity_z,
+            } => {
+                write_varint(w, entity_id)?;
+                write_ishort(w, velocity_x)?;
+                write_ishort(w, velocity_y)?;
+                write_ishort(w, velocity_z)?;
+            }
+            SPacket::PlayDestroyEntities {
+                count,
+                ref entity_ids,
+            } => {
+                write_varint(w, count)?;
+                for &entity_id in entity_ids.iter() {
+                    write_varint(w, entity_id)?;
+                }
+            }
+            SPacket::PlayEntity { entity_id } => {
+                write_varint(w, entity_id)?;
+            }
+            SPacket::PlayEntityRelativeMove {
+                entity_id,
+                delta_x,
+                delta_y,
+                delta_z,
+                on_ground,
+            } => {
+                write_varint(w, entity_id)?;
+                write_byte(w, double_to_fixed_point(delta_x) as i8)?;
+                write_byte(w, double_to_fixed_point(delta_y) as i8)?;
+                write_byte(w, double_to_fixed_point(delta_z) as i8)?;
+                write_bool(w, on_ground)?;
+            }
+            SPacket::PlayEntityLook {
+                entity_id,
+                yaw,
+                pitch,
+                on_ground,
+            } => {
+                write_varint(w, entity_id)?;
+                data::write_angle(w, yaw)?;
+                data::write_angle(w, pitch)?;
+                write_bool(w, on_ground)?;
+            }
+            SPacket::PlayEntityLookAndRelativeMove {
+                entity_id,
+                delta_x,
+                delta_y,
+                delta_z,
+                yaw,
+                pitch,
+                on_ground,
+            } => {
+                write_varint(w, entity_id)?;
+                write_byte(w, double_to_fixed_point(delta_x) as i8)?;
+                write_byte(w, double_to_fixed_point(delta_y) as i8)?;
+                write_byte(w, double_to_fixed_point(delta_z) as i8)?;
+                data::write_angle(w, yaw)?;
+                data::write_angle(w, pitch)?;
+                write_bool(w, on_ground)?;
+            }
+            SPacket::PlayEntityTeleport {
+                entity_id,
+                x,
+                y,
+                z,
+                yaw,
+                pitch,
+                on_ground,
+            } => {
+                write_varint(w, entity_id)?;
+                write_int(w, double_to_fixed_point(x))?;
+                write_int(w, double_to_fixed_point(y))?;
+                write_int(w, double_to_fixed_point(z))?;
+                data::write_angle(w, yaw)?;
+                data::write_angle(w, pitch)?;
+                write_bool(w, on_ground)?;
+            }
+            SPacket::PlayEntityHeadLook {
+                entity_id,
+                head_yaw,
+            } => {
+                write_varint(w, entity_id)?;
+                data::write_angle(w, head_yaw)?;
+            }
+            SPacket::PlayEntityStatus {
+                entity_id,
+                entity_status,
+            } => {
+                write_int(w, entity_id)?;
+                write_byte(w, entity_status)?;
+            }
+            SPacket::PlayAttachEntity {
+                entity_id,
+                vehicle_id,
+                leash,
+            } => {
+                write_int(w, entity_id)?;
+                write_int(w, vehicle_id)?;
+                write_bool(w, leash)?;
+            }
+            SPacket::PlayEntityMetadata {
+                entity_id,
+                ref metadata,
+            } => {
+                write_varint(w, entity_id)?;
+                metadata.write(w)?;
+            }
+            SPacket::PlayEntityEffect {
+                entity_id,
+                effect_id,
+                amplifier,
+                duration,
+                hide_particles,
+            } => {
+                write_varint(w, entity_id)?;
+                write_byte(w, effect_id)?;
+                write_byte(w, amplifier)?;
+                write_varint(w, duration)?;
+                write_bool(w, hide_particles)?;
+            }
+            SPacket::PlayRemoveEntityEffect {
+                entity_id,
+                effect_id,
+            } => {
+                write_varint(w, entity_id)?;
+                write_byte(w, effect_id)?;
+            }
+            SPacket::PlaySetExperience {
+                experience_bar,
+                level,
+                total_experience,
+            } => {
+                write_float(w, experience_bar)?;
+                write_varint(w, level)?;
+                write_varint(w, total_experience)?;
+            }
+            SPacket::PlayEntityProperties {
+                entity_id,
+                ref properties,
+            } => {
+                write_varint(w, entity_id)?;
+                write_int(w, properties.len() as i32)?;
+                for p in properties.iter() {
+                    data::write_string(w, &p.key)?;
+                    write_double(w, p.value)?;
+                    write_varint(w, p.modifiers.len() as i32)?;
+                    for m in p.modifiers.iter() {
+                        m.write(w)?;
+                    }
+                }
+            }
+            SPacket::PlayChunkData {
+                chunk_x,
+                chunk_z,
+                primary_bit_mask,
+                ref data,
+            } => {
+                write_int(w, chunk_x)?;
+                write_int(w, chunk_z)?;
+                match *data {
+                    SPlayChunkDataData::GroundUpContinuous(_) => write_bool(w, true)?,
+                    SPlayChunkDataData::NotGroundUpContinuous { .. } => write_bool(w, false)?,
+                }
+                write_ushort(w, primary_bit_mask)?;
+                match *data {
+                    SPlayChunkDataData::GroundUpContinuous(ref g) => {
+                        write_varint(w, g.len() as i32)?;
+                        g.write(w)?;
+                    }
+                    SPlayChunkDataData::NotGroundUpContinuous { ref sections } => {
+                        write_varint(w, sections.iter().fold(0, |acc, s| acc + s.len()) as i32)?;
+                        for s in sections.iter() {
+                            s.write(w)?;
+                        }
+                    }
+                }
+            }
+            SPacket::PlayMultiBlockChange {
+                chunk_x,
+                chunk_z,
+                ref data,
+            } => {
+                write_int(w, chunk_x)?;
+                write_int(w, chunk_z)?;
+                write_varint(w, data.len() as i32)?;
+                for d in data.iter() {
+                    let b = (d.x << 4) | (d.z & 0x0f);
+                    write_ubyte(w, b)?;
+                    write_ubyte(w, d.y)?;
+                    write_varint(w, d.block_id)?;
+                }
+            }
+            SPacket::PlayBlockChange { location, block_id } => {
+                location.write(w)?;
+                write_varint(w, block_id)?;
+            }
+            SPacket::PlayBlockAction {
+                location,
+                byte1,
+                byte2,
+                block_type,
+            } => {
+                location.write(w)?;
+                write_ubyte(w, byte1)?;
+                write_ubyte(w, byte2)?;
+                write_varint(w, block_type)?;
+            }
+            SPacket::PlayBlockBreakAnimation {
+                entity_id,
+                location,
+                destroy_stage,
+            } => {
+                write_varint(w, entity_id)?;
+                location.write(w)?;
+                write_byte(w, destroy_stage)?;
+            }
+            SPacket::PlayMapChunkBulk {
+                sky_light_sent,
+                ref chunks,
+            } => {
+                write_bool(w, sky_light_sent)?;
+                write_varint(w, chunks.len() as i32)?;
+                for &(ref x, _) in chunks.iter() {
+                    write_int(w, x.chunk_x)?;
+                    write_int(w, x.chunk_z)?;
+                    write_ushort(w, x.primary_bit_mask)?;
+                }
+                for &(_, ref chk) in chunks.iter() {
+                    chk.write(w)?;
+                }
+            }
+            SPacket::PlayExplosion {
+                x,
+                y,
+                z,
+                radius,
+                ref records,
+                player_motion_x,
+                player_motion_y,
+                player_motion_z,
+            } => {
+                write_float(w, x)?;
+                write_float(w, y)?;
+                write_float(w, z)?;
+                write_float(w, radius)?;
+                write_int(w, records.len() as i32)?;
+                for r in records.iter() {
+                    write_byte(w, r.0)?;
+                    write_byte(w, r.1)?;
+                    write_byte(w, r.2)?;
+                }
+                write_float(w, player_motion_x)?;
+                write_float(w, player_motion_y)?;
+                write_float(w, player_motion_z)?;
+            }
+            SPacket::PlayEffect {
+                effect_id,
+                location,
+                data,
+                disable_relative_volume,
+            } => {
+                write_int(w, effect_id)?;
+                location.write(w)?;
+                write_int(w, data)?;
+                write_bool(w, disable_relative_volume)?;
+            }
+            SPacket::PlaySoundEffect {
+                sound_name,
+                effect_pos_x,
+                effect_pos_y,
+                effect_pos_z,
+                volume,
+                pitch,
+            } => {
+                data::write_string(w, sound_name)?;
+                write_int(w, double_to_fixed_point(effect_pos_x))?;
+                write_int(w, double_to_fixed_point(effect_pos_y))?;
+                write_int(w, double_to_fixed_point(effect_pos_z))?;
+                write_float(w, volume)?;
+                write_ubyte(w, pitch)?;
+            }
+            SPacket::PlayParticle {
+                particle_id,
+                long_distance,
+                x,
+                y,
+                z,
+                offset_x,
+                offset_y,
+                offset_z,
+                particle_data,
+                particle_count,
+                ref data,
+            } => {
+                write_int(w, particle_id)?;
+                write_bool(w, long_distance)?;
+                write_float(w, x)?;
+                write_float(w, y)?;
+                write_float(w, z)?;
+                write_float(w, offset_x)?;
+                write_float(w, offset_y)?;
+                write_float(w, offset_z)?;
+                write_float(w, particle_data)?;
+                write_int(w, particle_count)?;
+                for &d in data.iter() {
+                    write_int(w, d)?;
+                }
+            }
+            SPacket::PlayChangeGameState { reason, value } => {
+                write_ubyte(w, reason)?;
+                write_float(w, value)?;
+            }
+            SPacket::PlaySpawnGlobalEntity {
+                entity_id,
+                entity_type,
+                x,
+                y,
+                z,
+            } => {
+                write_varint(w, entity_id)?;
+                write_byte(w, entity_type)?;
+                write_int(w, double_to_fixed_point(x))?;
+                write_int(w, double_to_fixed_point(y))?;
+                write_int(w, double_to_fixed_point(z))?;
+            }
+            SPacket::PlayOpenWindow {
+                window_id,
+                window_type,
+                ref window_title,
+                slot_num,
+                entity_id,
+            } => {
+                write_ubyte(w, window_id)?;
+                data::write_string(w, window_type)?;
+                window_title.write_proto(w)?;
+                write_ubyte(w, slot_num)?;
+                if window_type == "EntityHorse" {
+                    write_int(w, entity_id)?;
+                }
+            }
+            SPacket::PlayCloseWindow { window_id } => {
+                write_ubyte(w, window_id)?;
+            }
+            SPacket::PlaySetSlot {
+                window_id,
+                slot,
+                ref slot_data,
+            } => {
+                write_byte(w, window_id)?;
+                write_ishort(w, slot)?;
+                slot_data.write(w)?;
+            }
+            SPacket::PlayWindowItems {
+                window_id,
+                ref slots,
+            } => {
+                write_ubyte(w, window_id)?;
+                write_ishort(w, slots.len() as i16)?;
+                for s in slots.iter() {
+                    s.write(w)?;
+                }
+            }
+            SPacket::PlayWindowProperty {
+                window_id,
+                property,
+                value,
+            } => {
+                write_ubyte(w, window_id)?;
+                write_ishort(w, property)?;
+                write_ishort(w, value)?;
+            }
+            SPacket::PlayConfirmTransaction {
+                window_id,
+                action_num,
+                accepted,
+            } => {
+                write_byte(w, window_id)?;
+                write_ishort(w, action_num)?;
+                write_bool(w, accepted)?;
+            }
+            SPacket::PlayUpdateSign {
+                location,
+                ref line1,
+                ref line2,
+                ref line3,
+                ref line4,
+            } => {
+                location.write(w)?;
+                line1.write_proto(w)?;
+                line2.write_proto(w)?;
+                line3.write_proto(w)?;
+                line4.write_proto(w)?;
+            }
+            SPacket::PlayMap {
+                map_id,
+                scale,
+                ref icons,
+                ref data,
+            } => {
+                write_varint(w, map_id)?;
+                write_byte(w, scale)?;
+                for i in icons.iter() {
+                    let b = (i.direction << 4) | (i.icon_type & 0x0f);
+                    write_byte(w, b)?;
+                    write_byte(w, i.x)?;
+                    write_byte(w, i.z)?;
+                }
+                match *data {
+                    Some(ref x) => {
+                        write_byte(w, x.columns)?;
+                        write_byte(w, x.rows)?;
+                        write_byte(w, x.x)?;
+                        write_byte(w, x.z)?;
+                        write_varint(w, x.data.len() as i32)?;
+                        w.write_all(&x.data)?;
+                    }
+                    None => write_byte(w, 0)?,
+                }
+            }
+            SPacket::PlayUpdateBlockEntity {
+                location,
+                action,
+                ref nbt_data,
+            } => {
+                location.write(w)?;
+                write_ubyte(w, action)?;
+                nbt_data.write(w)?;
+            }
+            SPacket::PlayOpenSignEditor { location } => {
+                location.write(w)?;
+            }
+            SPacket::PlayStatistics { ref statistics } => {
+                write_varint(w, statistics.len() as i32)?;
+                for s in statistics.iter() {
+                    data::write_string(w, &s.0)?;
+                    write_varint(w, s.1)?;
+                }
+            }
+            SPacket::PlayPlayerListItem { uuid, ref players } => {
+                if players.len() == 0 {
+                    write_varint(w, 0)?;
+                    write_varint(w, 0)?;
+                } else {
+                    let action = match players[0] {
+                        SPlayPlayerListItemData::AddPlayer { .. } => 0,
+                        SPlayPlayerListItemData::UpdateGamemode { .. } => 1,
+                        SPlayPlayerListItemData::UpdateLatency { .. } => 2,
+                        SPlayPlayerListItemData::UpdateDisplayName { .. } => 3,
+                        SPlayPlayerListItemData::RemovePlayer { .. } => 4,
+                    };
+                    write_varint(w, action)?;
+                    write_varint(w, players.len() as i32)?;
+                }
+
+                data::write_uuid(w, &uuid)?;
+                for p in players {
+                    match *p {
+                        SPlayPlayerListItemData::AddPlayer {
+                            ref name,
+                            ref properties,
+                            gamemode,
+                            ping,
+                            ref display_name,
+                        } => {
+                            data::write_string(w, name)?;
+                            for p in properties {
+                                data::write_string(w, &p.name)?;
+                                data::write_string(w, &p.value)?;
+                                match p.signature {
+                                    Some(ref sig) => {
+                                        write_bool(w, true)?;
+                                        data::write_string(w, sig)?;
+                                    }
+                                    None => write_bool(w, false)?,
+                                }
+                            }
+                            write_varint(w, gamemode)?;
+                            write_varint(w, ping)?;
+                            match *display_name {
+                                Some(ref name) => {
+                                    write_bool(w, true)?;
+                                    name.write_proto(w)?;
+                                }
+                                None => write_bool(w, true)?,
+                            }
+                        }
+                        SPlayPlayerListItemData::UpdateGamemode { gamemode } => {
+                            write_varint(w, gamemode)?
+                        }
+                        SPlayPlayerListItemData::UpdateLatency { ping } => write_varint(w, ping)?,
+                        SPlayPlayerListItemData::UpdateDisplayName { ref display_name } => {
+                            match *display_name {
+                                Some(ref name) => {
+                                    write_bool(w, true)?;
+                                    name.write_proto(w)?;
+                                }
+                                None => write_bool(w, true)?,
+                            }
+                        }
+                        SPlayPlayerListItemData::RemovePlayer => (),
+                    }
+                }
+            }
+            SPacket::PlayPlayerAbilities {
+                flags,
+                flying_speed,
+                field_of_view_modifier,
+            } => {
+                write_byte(w, flags)?;
+                write_float(w, flying_speed)?;
+                write_float(w, field_of_view_modifier)?;
+            }
+            SPacket::PlayTabComplete { ref matches } => {
+                write_varint(w, matches.len() as i32)?;
+                for m in matches {
+                    data::write_string(w, m)?;
+                }
+            }
+            SPacket::PlayScoreboardObjective {
+                ref objective_name,
+                ref data,
+            } => {
+                data::write_string(w, objective_name)?;
+                match *data {
+                    SPlayScoreboardObjectiveData::CreateScoreboard {
+                        ref objective_value,
+                        ref objective_type,
+                    } => {
+                        data::write_string(w, objective_value)?;
+                        data::write_string(w, objective_type)?;
+                    }
+                    SPlayScoreboardObjectiveData::RemoveScoreboard => (),
+                    SPlayScoreboardObjectiveData::UpdateScoreboard {
+                        ref objective_value,
+                        ref objective_type,
+                    } => {
+                        data::write_string(w, objective_value)?;
+                        data::write_string(w, objective_type)?;
+                    }
+                }
+            }
+            SPacket::PlayUpdateScore {
+                ref score_name,
+                ref objective_name,
+                ref data,
+            } => {
+                data::write_string(w, score_name)?;
+                let action = match *data {
+                    SPlayUpdateScoreData::CreateOrUpdateItem { .. } => 0,
+                    SPlayUpdateScoreData::RemoveItem => 1,
+                };
+                write_byte(w, action)?;
+                data::write_string(w, objective_name)?;
+                match *data {
+                    SPlayUpdateScoreData::CreateOrUpdateItem { value } => write_varint(w, value)?,
+                    SPlayUpdateScoreData::RemoveItem => (),
+                }
+            }
+            SPacket::PlayDisplayScoreboard {
+                position,
+                ref score_name,
+            } => {
+                write_byte(w, position)?;
+                data::write_string(w, score_name)?;
+            }
+            SPacket::PlayTeams {
+                ref team_name,
+                ref data,
+            } => {
+                data::write_string(w, team_name)?;
+                match *data {
+                    SPlayTeamsData::CreateTeam {
+                        ref display_name,
+                        ref prefix,
+                        ref suffix,
+                        friendly_fire,
+                        name_tag_visibility,
+                        color,
+                        ref players,
+                    } => {
+                        write_byte(w, 0)?;
+                        data::write_string(w, display_name)?;
+                        data::write_string(w, prefix)?;
+                        data::write_string(w, suffix)?;
+                        write_byte(w, friendly_fire)?;
+                        data::write_string(w, name_tag_visibility)?;
+                        write_byte(w, color as i8)?;
+                        write_varint(w, players.len() as i32)?;
+                        for p in players {
+                            data::write_string(w, p)?;
+                        }
+                    }
+                    SPlayTeamsData::RemoveTeam => write_byte(w, 1)?,
+                    SPlayTeamsData::UpdateTeam {
+                        ref display_name,
+                        ref prefix,
+                        ref suffix,
+                        friendly_fire,
+                        name_tag_visibility,
+                        color,
+                    } => {
+                        write_byte(w, 2)?;
+                        data::write_string(w, display_name)?;
+                        data::write_string(w, prefix)?;
+                        data::write_string(w, suffix)?;
+                        write_byte(w, friendly_fire)?;
+                        data::write_string(w, name_tag_visibility)?;
+                        write_byte(w, color as i8)?;
+                    }
+                    SPlayTeamsData::AddPlayers { ref players } => {
+                        write_byte(w, 3)?;
+                        for p in players {
+                            data::write_string(w, p)?;
+                        }
+                    }
+                    SPlayTeamsData::RemovePlayers { ref players } => {
+                        write_byte(w, 4)?;
+                        for p in players {
+                            data::write_string(w, p)?;
+                        }
+                    }
+                }
+            }
+            SPacket::PlayPluginMessage { channel, ref data } => {
+                data::write_string(w, channel)?;
+                w.write_all(data)?;
+            }
+            SPacket::PlayDisconnect { ref reason } => {
+                reason.write_proto(w)?;
+            }
+            SPacket::PlayServerDifficulty { difficulty } => {
+                write_ubyte(w, difficulty)?;
+            }
+            SPacket::PlayCombatEvent { ref data } => match *data {
+                SPlayCombatEventData::EnterCombat => write_varint(w, 0)?,
+                SPlayCombatEventData::EndCombat {
+                    duration,
+                    entity_id,
+                } => {
+                    write_varint(w, 1)?;
+                    write_varint(w, duration)?;
+                    write_varint(w, entity_id)?;
+                }
+                SPlayCombatEventData::EntityDead {
+                    player_id,
+                    entity_id,
+                    ref message,
+                } => {
+                    write_varint(w, 2)?;
+                    write_varint(w, player_id)?;
+                    write_int(w, entity_id)?;
+                    data::write_string(w, message)?;
+                }
+            },
+            SPacket::PlayCamera { camera_id } => {
+                write_varint(w, camera_id)?;
+            }
+            SPacket::PlayWorldBorder { ref data } => match *data {
+                SPlayWorldBorderData::SetSize { radius } => {
+                    write_varint(w, 0)?;
+                    write_double(w, radius)?;
+                }
+                SPlayWorldBorderData::LerpSize {
+                    old_radius,
+                    new_radius,
+                    speed,
+                } => {
+                    write_varint(w, 1)?;
+                    write_double(w, old_radius)?;
+                    write_double(w, new_radius)?;
+                    write_varlong(w, speed)?;
+                }
+                SPlayWorldBorderData::SetCenter { x, z } => {
+                    write_varint(w, 2)?;
+                    write_double(w, x)?;
+                    write_double(w, z)?;
+                }
+                SPlayWorldBorderData::Initialize {
+                    x,
+                    z,
+                    old_radius,
+                    new_radius,
+                    speed,
+                    portal_teleport_boundary,
+                    warning_time,
+                    warning_blocks,
+                } => {
+                    write_varint(w, 3)?;
+                    write_double(w, x)?;
+                    write_double(w, z)?;
+                    write_double(w, old_radius)?;
+                    write_double(w, new_radius)?;
+                    write_varlong(w, speed)?;
+                    write_varint(w, portal_teleport_boundary)?;
+                    write_varint(w, warning_time)?;
+                    write_varint(w, warning_blocks)?;
+                }
+                SPlayWorldBorderData::SetWarningTime { warning_time } => {
+                    write_varint(w, 4)?;
+                    write_varint(w, warning_time)?;
+                }
+                SPlayWorldBorderData::SetWarningBlocks { warning_blocks } => {
+                    write_varint(w, 4)?;
+                    write_varint(w, warning_blocks)?;
+                }
+            },
+            SPacket::PlayTitle { ref data } => match *data {
+                SPlayTitleData::SetTitle { ref text } => {
+                    write_varint(w, 0)?;
+                    text.write_proto(w)?;
+                }
+                SPlayTitleData::SetSubtitle { ref subtitle } => {
+                    write_varint(w, 1)?;
+                    subtitle.write_proto(w)?;
+                }
+                SPlayTitleData::SetTimesAndDisplay {
+                    fade_in,
+                    stay,
+                    fade_out,
+                } => {
+                    write_varint(w, 2)?;
+                    write_int(w, fade_in)?;
+                    write_int(w, stay)?;
+                    write_int(w, fade_out)?;
+                }
+                SPlayTitleData::Hide => write_varint(w, 3)?,
+                SPlayTitleData::Reset => write_varint(w, 4)?,
+            },
+            SPacket::PlaySetCompression { threshold } => {
+                write_varint(w, threshold)?;
+            }
+            SPacket::PlayPlayerListHeaderAndFooter {
+                ref header,
+                ref footer,
+            } => {
+                header.write_proto(w)?;
+                footer.write_proto(w)?;
+            }
+            SPacket::PlayResourcePackSend { ref url, ref hash } => {
+                data::write_string(w, url)?;
+                data::write_string(w, hash)?;
+            }
+            SPacket::PlayUpdateEntityNBT { entity_id, ref tag } => {
+                write_varint(w, entity_id)?;
+                tag.write(w)?;
+            }
+            SPacket::StatusResponse { ref data } => {
+                data::write_string(w, &serde_json::to_string(data).unwrap())?;
+            }
+            SPacket::StatusPong { payload } => {
+                write_long(w, payload)?;
+            }
+            SPacket::LoginDisconnect { ref reason } => {
+                reason.write_proto(w)?;
+            }
+            SPacket::LoginLoginSuccess {
+                ref uuid,
+                ref username,
+            } => {
+                data::write_string(w, uuid)?;
+                data::write_string(w, username)?;
+            }
+            SPacket::LoginSetCompression { threshold } => {
+                write_varint(w, threshold)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -561,8 +1808,7 @@ pub struct SStatusResponseData {
     pub version: SStatusResponseVersion,
     pub players: SStatusResponsePlayers,
     pub description: Chat,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub favicon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub favicon: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -631,7 +1877,7 @@ pub enum SPlayWorldBorderData {
     },
     SetWarningBlocks {
         warning_blocks: i32,
-    }
+    },
 }
 
 #[derive(Debug)]
@@ -654,7 +1900,7 @@ pub enum SPlayTeamsData {
         display_name: String,
         prefix: String,
         suffix: String,
-        friendly_fire, u8,
+        friendly_fire: i8,
         name_tag_visibility: &'static str,
         color: text::Code,
         players: Vec<String>,
@@ -664,7 +1910,7 @@ pub enum SPlayTeamsData {
         display_name: String,
         prefix: String,
         suffix: String,
-        friendly_fire, u8,
+        friendly_fire: i8,
         name_tag_visibility: &'static str,
         color: text::Code,
     },
@@ -673,14 +1919,12 @@ pub enum SPlayTeamsData {
     },
     RemovePlayers {
         players: Vec<String>,
-    }
+    },
 }
 
 #[derive(Debug)]
 pub enum SPlayUpdateScoreData {
-    CreateOrUpdateItem {
-        value: i32,
-    },
+    CreateOrUpdateItem { value: i32 },
     RemoveItem,
 }
 
@@ -688,13 +1932,13 @@ pub enum SPlayUpdateScoreData {
 pub enum SPlayScoreboardObjectiveData {
     CreateScoreboard {
         objective_value: String,
-        type: String,
+        objective_type: String,
     },
     RemoveScoreboard,
     UpdateScoreboard {
         objective_value: String,
-        type: String,
-    }
+        objective_type: String,
+    },
 }
 
 #[derive(Debug)]
@@ -736,10 +1980,10 @@ pub struct SPlayMapData {
 
 #[derive(Debug)]
 pub struct SPlayMapIcon {
-    pub direction: u8,
-    pub type: u8,
-    pub x: u8,
-    pub z: u8,
+    pub direction: i8,
+    pub icon_type: i8,
+    pub x: i8,
+    pub z: i8,
 }
 
 #[derive(Debug)]
@@ -760,9 +2004,7 @@ pub struct SPlayMultiBlockChangeData {
 #[derive(Debug)]
 pub enum SPlayChunkDataData {
     GroundUpContinuous(data::GroundUpContinuous),
-    NotGroundUpContinuous {
-        sections: Vec<data::ChunkSection>,
-    }
+    NotGroundUpContinuous { sections: Vec<data::ChunkSection> },
 }
 
 #[derive(Debug)]

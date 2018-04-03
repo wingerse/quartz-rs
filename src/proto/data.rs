@@ -3,6 +3,7 @@ use proto::Result;
 use binary;
 use nbt;
 use uuid;
+use std::fmt::{Debug, self};
 
 pub fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
     binary::write_varint(w, s.len() as i32)?;
@@ -11,7 +12,7 @@ pub fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
 
 pub fn read_string<R: BufRead>(r: &mut R) -> Result<String> {
     let len = binary::read_varint(r)?;
-    let mut buf = Vec::with_capacity(len as usize);
+    let mut buf = vec![0u8; len as usize];
     r.read_exact(&mut buf)?;
     let string = String::from_utf8(buf)?;
     Ok(string)
@@ -24,11 +25,20 @@ pub fn write_uuid<W: Write>(w: &mut W, u: &uuid::Uuid) -> io::Result<()> {
 }
 
 pub fn read_uuid<R: Read>(r: &mut R) -> io::Result<uuid::Uuid> {
-    let mut arr = [u8; 16];
+    let mut arr = [0; 16];
     r.read_exact(&mut arr[..])?;
     arr.reverse();
     // cannot return error when b is 16 bytes.
     Ok(uuid::Uuid::from_bytes(&arr[..]).unwrap())
+}
+
+pub fn write_angle<W: Write>(w: &mut W, a: f64) -> io::Result<()> {
+    binary::write_byte(w, (((a.round() as i32 % 360) as f64 / 360.0) * 256.0) as i8)
+}
+
+pub fn read_angle<R: Read>(r: &mut R) -> io::Result<f64> {
+    let b = binary::read_byte(r)?;
+    Ok(b as f64 * (360.0 / 256.0))
 }
 
 #[derive(Debug)]
@@ -125,14 +135,14 @@ pub enum MetadataEntry {
 impl MetadataEntry {
     fn get_type(&self) -> u8 {
         match *self {
-            Byte(_) => 0,
-            Short(_) => 1,
-            Int(_) => 2,
-            Float(_) => 3,
-            String(_) => 4,
-            Slot(_) => 5,
-            Pos{..} => 6,
-            Orientation {..} => 7
+            MetadataEntry::Byte(_) => 0,
+            MetadataEntry::Short(_) => 1,
+            MetadataEntry::Int(_) => 2,
+            MetadataEntry::Float(_) => 3,
+            MetadataEntry::String(_) => 4,
+            MetadataEntry::Slot(_) => 5,
+            MetadataEntry::Pos{..} => 6,
+            MetadataEntry::Orientation {..} => 7
         }
     }
 }
@@ -169,7 +179,7 @@ impl EntityMetadata {
     }
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ModifierData {
     pub uuid: uuid::Uuid,
     pub amount: f64,
@@ -191,13 +201,12 @@ impl ModifierData {
     }
 }
 
-pub const CHUNK_SECTION_BLOCK_COUNT: u32 = 16 * 16 * 16;
+pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
 
-#[derive(Debug)]
 pub struct ChunkSection {
-    blocks: [u8; CHUNK_SECTION_BLOCK_COUNT],
-    block_light: [u8; CHUNK_SECTION_BLOCK_COUNT / 2],
-    sky_light: Option<[u8; CHUNK_SECTION_BLOCK_COUNT / 2]>,
+    pub blocks: [u8; CHUNK_SECTION_BLOCK_COUNT],
+    pub block_light: [u8; CHUNK_SECTION_BLOCK_COUNT / 2],
+    pub sky_light: Option<[u8; CHUNK_SECTION_BLOCK_COUNT / 2]>,
 }
 
 impl ChunkSection {
@@ -209,12 +218,33 @@ impl ChunkSection {
         }
         Ok(())
     }
+
+    pub fn len(&self) -> usize {
+        let mut l = 0;
+        l += self.blocks.len();
+        l += self.block_light.len();
+        l += match self.sky_light {
+            Some(ref arr) => arr.len(),
+            None => 0,
+        };
+
+        l
+    }
 }
 
-#[derive(Debug)]
+impl Debug for ChunkSection {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ChunkSection")
+            .field("blocks", &&self.blocks[..])
+            .field("block_light", &&self.blocks[..])
+            .field("sky_light", &self.sky_light.as_ref().map(|arr| &arr[..]))
+            .finish()
+    }
+}
+
 pub struct GroundUpContinuous {
-    sections: Vec<data::ChunkSection>,
-    biome_array: [u8; 256],
+    pub sections: Vec<ChunkSection>,
+    pub biome_array: [u8; 256],
 }
 
 impl GroundUpContinuous {
@@ -223,5 +253,18 @@ impl GroundUpContinuous {
             sec.write(w)?;
         }
         w.write_all(&self.biome_array)
+    }
+
+    pub fn len(&self) -> usize {
+        self.sections.iter().fold(0, |acc, x| acc + x.len()) + self.biome_array.len()
+    }
+}
+
+impl Debug for GroundUpContinuous {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("GroundUpContinuous")
+            .field("sections", &self.sections)
+            .field("biome_array", &&self.biome_array[..])
+            .finish()
     }
 }

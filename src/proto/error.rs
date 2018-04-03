@@ -1,10 +1,10 @@
 use std::io;
 use std::error::Error as StdError;
-use std::fmt::{self};
 use std::string::FromUtf8Error;
 use nbt;
 use text::chat;
 use binary;
+use super::MAX_PACKET_LEN;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -17,8 +17,20 @@ quick_error! {
             from()
             cause(err)
         }
-        PacketTooLong(err: usize) {
-            description("packet too long")
+        PacketTooLarge(err: usize) {
+            description("packet too large")
+            display(me) -> ("{}, got {} bytes left", me.description(), err)
+        }
+        PacketSizeExceededMaxAllowed(err: i32) {
+            description("packet size exceeded maximum allowed")
+            display(me) -> ("{}: {}, got {}", me.description(), MAX_PACKET_LEN, err)
+        }
+        NegativePacketLen(err: i32) {
+            description("negative packet length")
+            display(me) -> ("{}, got {}", me.description(), err)
+        }
+        InvalidPacketId(err: i32) {
+            description("invalid packet id")
             display(me) -> ("{}, got: {}", me.description(), err)
         }
         NBTError(err: nbt::Error) {
