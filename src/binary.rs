@@ -1,5 +1,5 @@
-use std::io::{self, Write, Read, BufRead};
-use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::{self, BufRead, Read, Write};
 
 pub fn write_bool<W: Write>(w: &mut W, b: bool) -> io::Result<()> {
     let byte = if b { 1u8 } else { 0u8 };
@@ -117,7 +117,7 @@ pub fn read_varint<R: BufRead>(r: &mut R) -> Result<i32, VarintError> {
             return Err(VarintError::TooLarge);
         }
         let first7 = buffer[0] & 0x7f;
-        x |= (first7 as u32) << (i * 7);
+        x |= u32::from(first7) << (i * 7);
         // msb not set
         if buffer[0] & 0x80 == 0 {
             break;
@@ -155,7 +155,7 @@ pub fn read_varlong<R: BufRead>(r: &mut R) -> Result<i64, VarintError> {
             return Err(VarintError::TooLarge);
         }
         let first7 = buffer[0] & 0x7f;
-        x |= (first7 as u64) << (i * 7);
+        x |= u64::from(first7) << (i * 7);
         // msb not set
         if buffer[0] & 0x80 == 0 {
             break;
@@ -167,9 +167,9 @@ pub fn read_varlong<R: BufRead>(r: &mut R) -> Result<i64, VarintError> {
 }
 
 pub fn double_to_fixed_point(f: f64) -> i32 {
-    (f * (1 << 5) as f64) as i32
+    (f * f64::from(1 << 5)) as i32
 }
 
 pub fn fixed_point_to_double(i: i32) -> f64 {
-    (i as f64) / (1 << 5) as f64
+    f64::from(i) / f64::from(1 << 5)
 }

@@ -1,15 +1,16 @@
-use std::io::{Write, Read, self, BufRead};
-use std::net::TcpStream;
 use binary;
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use std::net::TcpStream;
 
 mod error;
+pub use self::error::*;
+
 pub mod packets;
 pub mod data;
 
-pub use self::error::*;
-
 pub const VERSION: i32 = 47;
-pub const MAX_PACKET_LEN: i32 = 2097152;
+pub const VERSION_STRING: &str = "1.8";
+pub const MAX_PACKET_LEN: i32 = 2_097_152;
 
 #[derive(Debug, Clone, Copy)]
 pub enum State {
@@ -20,13 +21,13 @@ pub enum State {
 }
 
 pub struct Writer<W: Write> {
-    w: W,
+    w: BufWriter<W>,
     buf: Vec<u8>,
 }
 
 impl<W: Write> Writer<W> {
     pub fn new(w: W) -> Writer<W> {
-        Writer {w, buf: Vec::new()}
+        Writer { w: BufWriter::new(w), buf: Vec::new() }
     }
 
     pub fn write_packet(&mut self, packet: &packets::SPacket) -> io::Result<()> {
@@ -42,15 +43,15 @@ impl<W: Write> Writer<W> {
     }
 }
 
-pub struct Reader<R: BufRead> {
-    r: R,
+pub struct Reader<R: Read> {
+    r: BufReader<R>,
     buf: Vec<u8>,
     state: State,
 }
 
-impl<R: BufRead> Reader<R> {
+impl<R: Read> Reader<R> {
     pub fn new(r: R) -> Reader<R> {
-        Reader {r, buf: Vec::new(), state: State::Handshake}
+        Reader { r: BufReader::new(r), buf: Vec::new(), state: State::Handshake }
     }
 
     pub fn set_state(&mut self, s: State) {
@@ -71,7 +72,7 @@ impl<R: BufRead> Reader<R> {
         let mut slice = &self.buf[..];
         let id = binary::read_varint(&mut slice)?;
         let packet = packets::CPacket::read(&mut slice, self.state, id)?;
-        if slice.len() != 0 {
+        if !slice.is_empty() {
             return Err(Error::PacketTooLarge(slice.len()))
         } 
 

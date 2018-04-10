@@ -1,7 +1,6 @@
 use std::iter::Iterator;
-
-use super::chat::{wrap, Component, ComponentWrapper, StringComponent};
-use super::{Code, Token, Tokenizer};
+use text::{Code, Token, Tokenizer};
+use text::chat::{self, Component, StringComponent, Wrapper};
 
 fn strip_codes(codes: &[Code]) -> &[Code] {
     for (i, c) in codes.iter().enumerate() {
@@ -12,13 +11,14 @@ fn strip_codes(codes: &[Code]) -> &[Code] {
     codes
 }
 
-fn push_extra(c: &mut StringComponent, component: ComponentWrapper) {
+fn push_extra(c: &mut StringComponent, component: StringComponent) {
     let extra = &mut c.base.extra;
+
     if extra.is_none() {
         *extra = Some(Vec::new());
     }
 
-    extra.as_mut().unwrap().push(component);
+    extra.as_mut().unwrap().push(Wrapper(Component::from(component)));
 }
 
 fn unwrap_string_component(c: &mut Component) -> &mut StringComponent {
@@ -82,8 +82,8 @@ pub fn parse_legacy(s: &str, control_char: char) -> StringComponent {
     let mut tokenizer = Tokenizer::new(s, control_char);
 
     let mut root = StringComponent::default();
-    push_extra(&mut root, wrap(StringComponent::default())); // color
-    push_extra(get_last_color(&mut root), wrap(StringComponent::default())); //formatting
+    push_extra(&mut root, StringComponent::default()); // color
+    push_extra(get_last_color(&mut root), StringComponent::default()); //formatting
 
     while let Some(token) = Iterator::next(&mut tokenizer) {
         match token {
@@ -96,17 +96,17 @@ pub fn parse_legacy(s: &str, control_char: char) -> StringComponent {
                 if codes[0].is_formatting() {
                     {
                         let mut formatting = get_last_formatting(&mut root);
-                        push_extra(formatting, wrap(StringComponent::default()));
+                        push_extra(formatting, StringComponent::default());
                     }
                     let formatting = get_last_formatting(&mut root);
                     for &c in codes {
                         formatting.base.set_formatting_style(c);
                     }
                 } else {
-                    push_extra(&mut root, wrap(StringComponent::default())); //color
+                    push_extra(&mut root, StringComponent::default()); //color
                     {
                         let color = get_last_color(&mut root);
-                        push_extra(color, wrap(StringComponent::default())); //formatting
+                        push_extra(color, StringComponent::default()); //formatting
                         color.base.color = Some(codes[0].to_color());
                     }
                     let formatting = get_last_formatting(&mut root);
@@ -123,14 +123,11 @@ pub fn parse_legacy(s: &str, control_char: char) -> StringComponent {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use super::super::chat;
-
     #[test]
     fn test_parse() {
         let s = "&6&l&kii&4&lWigit&6&l&kii";
         let component = parse_legacy(s, '&');
-        let res = ::serde_json::to_string(&chat::Chat(chat::wrap(component))).unwrap();
+        let res = ::serde_json::to_string(&chat::Chat::from(Component::from(component))).unwrap();
         assert_eq!(res, r#"{"extra":[{"extra":[{"text":""}],"text":""},{"color":"gold","extra":[{"bold":true,"obfuscated":true,"text":"ii"}],"text":""},{"color":"dark_red","extra":[{"bold":true,"text":"Wigit"}],"text":""},{"color":"gold","extra":[{"bold":true,"obfuscated":true,"text":"ii"}],"text":""}],"text":""}"#);
     }
 }

@@ -1,11 +1,10 @@
-use std::fmt;
-use std::convert::From;
-use serde::de::{Deserialize, Deserializer, SeqAccess, MapAccess, Visitor, self};
-use std::io;
-use serde_json;
 use proto;
-
-use super::Code;
+use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde_json;
+use std::convert::From;
+use std::fmt;
+use std::io;
+use text::Code;
 
 mod color;
 pub use self::color::*;
@@ -29,7 +28,7 @@ pub struct Base {
     #[serde(rename = "hoverEvent")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hover_event: Option<HoverEvent>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub extra: Option<Vec<ComponentWrapper>>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub extra: Option<Vec<Wrapper>>,
 }
 
 impl Base {
@@ -57,7 +56,7 @@ pub struct TranslationComponent {
     pub translate: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub with: Option<Vec<ComponentWrapper>>,
+    pub with: Option<Vec<Wrapper>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -126,41 +125,37 @@ impl Component {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ComponentWrapper(pub Component);
+pub struct Wrapper(pub Component);
 
-pub fn wrap<T: Into<Component>>(t: T) -> ComponentWrapper {
-    ComponentWrapper(t.into())
-}
-
-impl<'de> Deserialize<'de> for ComponentWrapper {
+impl<'de> Deserialize<'de> for Wrapper {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct ComponentWrapperVisitor;
 
         impl<'de> Visitor<'de> for ComponentWrapperVisitor {
-            type Value = ComponentWrapper;
+            type Value = Wrapper;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 write!(formatter, "object, array, or primitive")
             }
 
             fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
-                Ok(ComponentWrapper(Component::String(StringComponent{text: v.to_string(), base: Default::default()})))
+                Ok(Wrapper(Component::from(StringComponent { text: v.to_string(), base: Default::default() })))
             }
 
             fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                Ok(ComponentWrapper(Component::String(StringComponent{text: v.to_string(), base: Default::default()})))
+                Ok(Wrapper(Component::from(StringComponent { text: v.to_string(), base: Default::default() })))
             }
 
             fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
-                Ok(ComponentWrapper(Component::String(StringComponent{text: v.to_string(), base: Default::default()})))
+                Ok(Wrapper(Component::from(StringComponent { text: v.to_string(), base: Default::default() })))
             }
 
             fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Ok(ComponentWrapper(Component::String(StringComponent{text: v.into(), base: Default::default()})))
+                Ok(Wrapper(Component::from(StringComponent { text: v.into(), base: Default::default() })))
             }
 
             fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-                let first = seq.next_element::<ComponentWrapper>()?;
+                let first = seq.next_element::<Wrapper>()?;
                 if first.is_none() {
                     return Err(de::Error::invalid_length(0, &"at least 1"));
                 }
@@ -175,7 +170,7 @@ impl<'de> Deserialize<'de> for ComponentWrapper {
             }
 
             fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-                Ok(ComponentWrapper(Component::deserialize(de::value::MapAccessDeserializer::new(map))?))
+                Ok(Wrapper(Component::deserialize(de::value::MapAccessDeserializer::new(map))?))
             }
         }
 
@@ -183,8 +178,15 @@ impl<'de> Deserialize<'de> for ComponentWrapper {
     }
 }
 
+// box to reduce size.
 #[derive(Debug, Serialize)]
-pub struct Chat(pub ComponentWrapper);
+pub struct Chat(pub Box<Wrapper>);
+
+impl From<Component> for Chat {
+    fn from(c: Component) -> Chat {
+        Chat(Box::new(Wrapper(c)))
+    }
+}
 
 impl<'de> Deserialize<'de> for Chat {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -198,11 +200,11 @@ impl<'de> Deserialize<'de> for Chat {
             }
 
             fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
-                Ok(Chat(ComponentWrapper::deserialize(de::value::SeqAccessDeserializer::new(seq))?))
+                Ok(Chat(Box::new(Wrapper::deserialize(de::value::SeqAccessDeserializer::new(seq))?)))
             }
 
             fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-                Ok(Chat(ComponentWrapper::deserialize(de::value::MapAccessDeserializer::new(map))?))
+                Ok(Chat(Box::new(Wrapper::deserialize(de::value::MapAccessDeserializer::new(map))?)))
             }
         }
 
@@ -237,7 +239,7 @@ impl Chat {
 
     pub fn read_proto<R: io::BufRead>(r: &mut R) -> proto::Result<Chat> {
         let s = proto::data::read_string(r)?;
-        let chat: Chat = serde_json::from_str(&s).map_err(|e| Error::from(e))?;
+        let chat: Chat = serde_json::from_str(&s).map_err(Error::from)?;
         Ok(chat)
     }
 }
@@ -245,8 +247,6 @@ impl Chat {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
-
     #[test]
     fn test_enum_ser() {
         let e = Color::Black;
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_ser() {
-        let com = Component::String(StringComponent {
+        let com = Component::from(StringComponent {
             base: Base {
                 bold: Some(true),
                 ..Default::default()
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_de() {
-        let com: ComponentWrapper = serde_json::from_str("{\"bold\":true,\"text\":\"Hello\",\"extra\":[\"hi\"]}").unwrap();
+        let com: Wrapper = serde_json::from_str("{\"bold\":true,\"text\":\"Hello\",\"extra\":[\"hi\"]}").unwrap();
         match com.0 {
             Component::String(s) => {
                 assert_eq!(s.base.bold, Some(true));
@@ -296,7 +296,7 @@ mod tests {
             _ => panic!(),
         }
 
-        let com: ComponentWrapper = serde_json::from_str("[1, 2, \"hi\"]").unwrap();
+        let com: Wrapper = serde_json::from_str("[1, 2, \"hi\"]").unwrap();
         match com.0 {
             Component::String(s) =>  { 
                 assert_eq!(s.text, "1");

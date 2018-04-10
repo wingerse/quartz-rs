@@ -1,5 +1,5 @@
-use std::iter::Iterator;
 use std::fmt;
+use std::iter::Iterator;
 
 pub mod chat;
 use self::chat::Color;
@@ -137,7 +137,7 @@ impl fmt::Display for Code {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum Token {
     String(String),
     Codes(Vec<Code>),
@@ -204,7 +204,7 @@ impl Iterator for Tokenizer {
             codes.push(Code::from_char(self.next()).unwrap())
         }
 
-        if codes.len() != 0 {
+        if !codes.is_empty() {
             return Some(Token::Codes(codes));
         }  
 
@@ -224,5 +224,28 @@ impl Iterator for Tokenizer {
             chars.push(self.next());
         } 
         Some(Token::String(chars.into_iter().collect()))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_tokenizer() {
+        let s = "&6&l&kii&4&lWigit&6&l&kii";
+        let mut t = Tokenizer::new(s, '&');
+        let mut o = Iterator::next(&mut t).unwrap();
+        assert_eq!(Token::Codes(vec![Code::Gold, Code::Bold, Code::Obfuscated]), o);
+        o = Iterator::next(&mut t).unwrap();
+        assert_eq!(Token::String("ii".into()), o);
+        o = Iterator::next(&mut t).unwrap();
+        assert_eq!(Token::Codes(vec![Code::DarkRed, Code::Bold]), o);
+        o = Iterator::next(&mut t).unwrap();
+        assert_eq!(Token::String("Wigit".into()), o);
+        o = Iterator::next(&mut t).unwrap();
+        assert_eq!(Token::Codes(vec![Code::Gold, Code::Bold, Code::Obfuscated]), o);
+        o = Iterator::next(&mut t).unwrap();
+        assert_eq!(Token::String("ii".into()), o);
     }
 }

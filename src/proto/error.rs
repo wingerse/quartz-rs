@@ -1,10 +1,10 @@
-use std::io;
-use std::error::Error as StdError;
-use std::string::FromUtf8Error;
-use nbt;
-use text::chat;
 use binary;
+use nbt;
+use std::error::Error as StdError;
+use std::io;
+use std::string::FromUtf8Error;
 use super::MAX_PACKET_LEN;
+use text::chat;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -24,6 +24,10 @@ quick_error! {
         PacketSizeExceededMaxAllowed(err: i32) {
             description("packet size exceeded maximum allowed")
             display(me) -> ("{}: {}, got {}", me.description(), MAX_PACKET_LEN, err)
+        }
+        UnexpectedPacket {expected: &'static str, got: String} {
+            description("unexpected packet")
+            display(me) -> ("{}: expected: {}, got: {}", me.description(), expected, got)
         }
         NegativePacketLen(err: i32) {
             description("negative packet length")

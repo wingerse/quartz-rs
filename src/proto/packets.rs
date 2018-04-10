@@ -1,12 +1,13 @@
-use text::chat::Chat;
-use nbt::NBT;
-use text;
-use super::{data, Result, State, Error};
-use uuid;
-use std::io;
 use binary::*;
+use nbt::NBT;
 use serde_json;
+use std::io;
 use std::io::Read;
+use std::sync::Arc;
+use proto::{data, Error, Result, State};
+use text;
+use text::chat::Chat;
+use uuid;
 
 #[derive(Debug)]
 pub enum CPacket {
@@ -147,7 +148,7 @@ pub enum CPacket {
 
 impl CPacket {
     pub fn read(r: &mut &[u8], state: State, id: i32) -> Result<Self> {
-        return match state {
+        match state {
             State::Handshake => {
                 match id {
                     0 => Ok(CPacket::Handshake {
@@ -1178,7 +1179,7 @@ impl SPacket {
                     data::write_string(w, &p.key)?;
                     write_double(w, p.value)?;
                     write_varint(w, p.modifiers.len() as i32)?;
-                    for m in p.modifiers.iter() {
+                    for m in &p.modifiers {
                         m.write(w)?;
                     }
                 }
@@ -1193,7 +1194,7 @@ impl SPacket {
                 write_int(w, chunk_z)?;
                 match *data {
                     SPlayChunkDataData::GroundUpContinuous(_) => write_bool(w, true)?,
-                    SPlayChunkDataData::NotGroundUpContinuous { .. } => write_bool(w, false)?,
+                    SPlayChunkDataData::GroundUpNonContinuous(_) => write_bool(w, false)?,
                 }
                 write_ushort(w, primary_bit_mask)?;
                 match *data {
@@ -1201,11 +1202,9 @@ impl SPacket {
                         write_varint(w, g.len() as i32)?;
                         g.write(w)?;
                     }
-                    SPlayChunkDataData::NotGroundUpContinuous { ref sections } => {
-                        write_varint(w, sections.iter().fold(0, |acc, s| acc + s.len()) as i32)?;
-                        for s in sections.iter() {
-                            s.write(w)?;
-                        }
+                    SPlayChunkDataData::GroundUpNonContinuous(ref g) => {
+                        write_varint(w, g.len() as i32)?;
+                        g.write(w)?;
                     }
                 }
             }
@@ -1471,7 +1470,7 @@ impl SPacket {
                 }
             }
             SPacket::PlayPlayerListItem { uuid, ref players } => {
-                if players.len() == 0 {
+                if players.is_empty() {
                     write_varint(w, 0)?;
                     write_varint(w, 0)?;
                 } else {
@@ -1808,12 +1807,12 @@ pub struct SStatusResponseData {
     pub version: SStatusResponseVersion,
     pub players: SStatusResponsePlayers,
     pub description: Chat,
-    #[serde(skip_serializing_if = "Option::is_none")] pub favicon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub favicon: Arc<Option<String>>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct SStatusResponseVersion {
-    pub name: String,
+    pub name: &'static str,
     pub protocol: i32,
 }
 
@@ -2004,7 +2003,7 @@ pub struct SPlayMultiBlockChangeData {
 #[derive(Debug)]
 pub enum SPlayChunkDataData {
     GroundUpContinuous(data::GroundUpContinuous),
-    NotGroundUpContinuous { sections: Vec<data::ChunkSection> },
+    GroundUpNonContinuous(data::GroundUpNonContinuous),
 }
 
 #[derive(Debug)]

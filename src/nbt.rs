@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-use std::io::{self, Read, Write};
-use std::error::Error as StdError;
-use std::string::FromUtf8Error;
-
 use binary;
+use std::collections::HashMap;
+use std::error::Error as StdError;
+use std::io::{self, Read, Write};
+use std::string::FromUtf8Error;
 
 fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
     binary::write_ushort(w, s.len() as u16)?;
@@ -104,7 +103,7 @@ impl Tag {
             }
             Tag::String(ref x) => write_string(w, x)?,
             Tag::List(ref x) => {
-                let (item_id, len) = if x.len() == 0 {
+                let (item_id, len) = if x.is_empty() {
                     (0, 0)
                 } else {
                     (x[0].id(), x.len())
@@ -123,6 +122,7 @@ impl Tag {
                     write_string(w, k)?;
                     v.write(w)?;
                 }
+                binary::write_ubyte(w, 0)?;
             },
             Tag::IntArray(ref x) => {
                 binary::write_int(w, x.len() as i32)?;
@@ -166,7 +166,7 @@ impl Tag {
                 }
 
                 let mut v = Vec::with_capacity(len as usize);
-                for i in 0..len {
+                for _ in 0..len {
                     v.push(Tag::read(id, r, level)?);
                 }
                 Ok(Tag::List(v))
@@ -197,8 +197,8 @@ impl Tag {
                     return Err(Error::IntArrayNegativeLength(len));
                 }
                 let mut v = vec![0i32; len as usize];
-                
-                for i in v.iter_mut() {
+
+                for i in &mut v {
                     *i = binary::read_int(r)?;
                 }
                 Ok(Tag::IntArray(v))
@@ -208,6 +208,7 @@ impl Tag {
     }
 }
 
+/// A named binary tag. This can be empty(None) or have a single tag
 #[derive(Debug)]
 pub struct NBT(Option<(String, Tag)>);
 

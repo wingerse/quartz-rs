@@ -1,9 +1,9 @@
-use std::io::{self, Read, BufRead, Write};
-use proto::Result;
 use binary;
 use nbt;
+use proto::Result;
+use std::fmt::{self, Debug};
+use std::io::{self, BufRead, Read, Write};
 use uuid;
-use std::fmt::{Debug, self};
 
 pub fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
     binary::write_varint(w, s.len() as i32)?;
@@ -33,12 +33,12 @@ pub fn read_uuid<R: Read>(r: &mut R) -> io::Result<uuid::Uuid> {
 }
 
 pub fn write_angle<W: Write>(w: &mut W, a: f64) -> io::Result<()> {
-    binary::write_byte(w, (((a.round() as i32 % 360) as f64 / 360.0) * 256.0) as i8)
+    binary::write_byte(w, ((f64::from(a.round() as i32 % 360) / 360.0) * 256.0) as i8)
 }
 
 pub fn read_angle<R: Read>(r: &mut R) -> io::Result<f64> {
     let b = binary::read_byte(r)?;
-    Ok(b as f64 * (360.0 / 256.0))
+    Ok(f64::from(b) * (360.0 / 256.0))
 }
 
 #[derive(Debug)]
@@ -97,9 +97,9 @@ pub struct Position {
 
 impl Position {
     pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        let mut val: u64 = (self.z & 0x3ffffff) as u64;
+        let mut val: u64 = (self.z & 0x3ff_ffff) as u64;
         val |= (self.y as u64 & 0xfff) << 26;
-        val |= (self.x as u64 & 0x3ffffff) << 38;
+        val |= (self.x as u64 & 0x3ff_ffff) << 38;
         binary::write_long(w, val as i64)
     }
 
@@ -204,7 +204,7 @@ impl ModifierData {
 pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
 
 pub struct ChunkSection {
-    pub blocks: [u8; CHUNK_SECTION_BLOCK_COUNT],
+    pub blocks: [u8; CHUNK_SECTION_BLOCK_COUNT * 2],
     pub block_light: [u8; CHUNK_SECTION_BLOCK_COUNT / 2],
     pub sky_light: Option<[u8; CHUNK_SECTION_BLOCK_COUNT / 2]>,
 }
@@ -242,29 +242,41 @@ impl Debug for ChunkSection {
     }
 }
 
+#[derive(Debug)]
 pub struct GroundUpContinuous {
-    pub sections: Vec<ChunkSection>,
-    pub biome_array: [u8; 256],
+    pub sections: GroundUpNonContinuous,
+    pub biome_array: Box<[[u8; 16]; 16]>,
 }
 
 impl GroundUpContinuous {
     pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        for sec in self.sections.iter() {
-            sec.write(w)?;
+        self.sections.write(w)?;
+        for z in &*self.biome_array {
+            w.write_all(z)?;
         }
-        w.write_all(&self.biome_array)
+
+        Ok(())
     }
 
     pub fn len(&self) -> usize {
-        self.sections.iter().fold(0, |acc, x| acc + x.len()) + self.biome_array.len()
+        self.sections.len() + (16 * 16)
     }
 }
 
-impl Debug for GroundUpContinuous {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("GroundUpContinuous")
-            .field("sections", &self.sections)
-            .field("biome_array", &&self.biome_array[..])
-            .finish()
+#[derive(Debug)]
+pub struct GroundUpNonContinuous {
+    pub sections: Vec<ChunkSection>,
+}
+
+impl GroundUpNonContinuous {
+    pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        for sec in &self.sections {
+            sec.write(w)?;
+        }
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.sections.iter().fold(0, |acc, x| acc + x.len())
     }
 }
