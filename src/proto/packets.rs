@@ -3,11 +3,12 @@ use nbt::NBT;
 use serde_json;
 use std::io;
 use std::io::Read;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use proto::{data, Error, Result, State};
 use text;
 use text::chat::Chat;
 use uuid;
+use std::collections::HashSet;
 
 #[derive(Debug)]
 pub enum CPacket {
@@ -1821,10 +1822,10 @@ pub struct SStatusResponsePlayers {
     pub max: i32,
     pub online: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sample: Option<Vec<SStatusResponsePlayer>>,
+    pub sample: Option<Arc<Mutex<HashSet<SStatusResponsePlayer>>>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Hash, Clone, PartialEq, Eq)]
 pub struct SStatusResponsePlayer {
     pub name: String,
     pub id: String,

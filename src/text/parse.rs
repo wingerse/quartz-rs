@@ -1,6 +1,6 @@
 use std::iter::Iterator;
 use text::{Code, Token, Tokenizer};
-use text::chat::{self, Component, StringComponent, Wrapper};
+use text::chat::{Component, StringComponent, Wrapper, Chat};
 
 fn strip_codes(codes: &[Code]) -> &[Code] {
     for (i, c) in codes.iter().enumerate() {
@@ -123,11 +123,12 @@ pub fn parse_legacy(s: &str, control_char: char) -> StringComponent {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     #[test]
     fn test_parse() {
         let s = "&6&l&kii&4&lWigit&6&l&kii";
         let component = parse_legacy(s, '&');
-        let res = ::serde_json::to_string(&chat::Chat::from(Component::from(component))).unwrap();
+        let res = ::serde_json::to_string(&Chat::from(Component::from(component))).unwrap();
         assert_eq!(res, r#"{"extra":[{"extra":[{"text":""}],"text":""},{"color":"gold","extra":[{"bold":true,"obfuscated":true,"text":"ii"}],"text":""},{"color":"dark_red","extra":[{"bold":true,"text":"Wigit"}],"text":""},{"color":"gold","extra":[{"bold":true,"obfuscated":true,"text":"ii"}],"text":""}],"text":""}"#);
     }
 }

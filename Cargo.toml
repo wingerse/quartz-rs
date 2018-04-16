@@ -9,5 +9,5 @@ serde = {version = "1.0.35", features = ["rc"]}
 serde_json = "1.0.13"
 serde_derive = "1.0.35"
 quick-error = "1.2.1"
-uuid = "0.6.2"
+uuid = {version = "0.6.2", features = ["v3"]}
 base64 = "0.9.0"
