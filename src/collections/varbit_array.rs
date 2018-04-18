@@ -28,11 +28,10 @@ impl VarbitArray {
 
     pub fn change_bit_size(&mut self, new_bit_size: u8) {
         let mut new_array = VarbitArray::new(new_bit_size, self.len);
-        let mut i = 0;
-        while i < self.len {
+
+        for i in 0..self.len {
             let v = self.get(i);
             new_array.set(i, v);
-            i += 1;
         }
 
         *self = new_array;

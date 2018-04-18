@@ -210,15 +210,6 @@ pub struct ChunkSection {
 }
 
 impl ChunkSection {
-    pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        w.write_all(&self.blocks)?;
-        w.write_all(&self.block_light)?;
-        if let Some(ref sky_light) = self.sky_light {
-            w.write_all(sky_light)?;
-        }
-        Ok(())
-    }
-
     pub fn len(&self) -> usize {
         let mut l = 0;
         l += self.blocks.len();
@@ -236,7 +227,7 @@ impl Debug for ChunkSection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("ChunkSection")
             .field("blocks", &&self.blocks[..])
-            .field("block_light", &&self.blocks[..])
+            .field("block_light", &&self.block_light[..])
             .field("sky_light", &self.sky_light.as_ref().map(|arr| &arr[..]))
             .finish()
     }
@@ -271,7 +262,15 @@ pub struct GroundUpNonContinuous {
 impl GroundUpNonContinuous {
     pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
         for sec in &self.sections {
-            sec.write(w)?;
+            w.write_all(&sec.blocks)?;
+        }
+        for sec in &self.sections {
+            w.write_all(&sec.block_light)?;
+        }
+        for sec in &self.sections {
+            if let Some(ref sky_light) = sec.sky_light {
+                w.write_all(sky_light)?;
+            }
         }
         Ok(())
     }

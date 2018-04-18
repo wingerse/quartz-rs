@@ -44,7 +44,7 @@ impl NetworkServer {
         incoming_players: Sender<Player>,
     ) -> NetworkServer {
         let mut p = HashSet::new();
-        p.insert(SStatusResponsePlayer {name: "Albatross_".into(), id: Uuid::new_v3(&uuid::NAMESPACE_URL, &"OfflinePlayer:Albatross_").hyphenated().to_string()});
+        p.insert(SStatusResponsePlayer {name: "Notch".into(), id: Uuid::new_v3(&uuid::NAMESPACE_URL, &"OfflinePlayer:Notch").hyphenated().to_string()});
 
         let player_list = Arc::new(Mutex::new(p));
         NetworkServer { addr, favicon: Arc::new(favicon), running, incoming_players, player_list }
@@ -213,7 +213,7 @@ impl NetworkServer {
         mut writer: Writer<W>,
         connected: Arc<Mutex<bool>>,
         sender: Sender<CPacket>,
-        receiver: Receiver<SPacket>,
+        receiver: Receiver<Arc<SPacket>>,
         player: SStatusResponsePlayer,
         player_list: Arc<Mutex<HashSet<SStatusResponsePlayer>>>,
     ) -> Result<(), proto::Error> {

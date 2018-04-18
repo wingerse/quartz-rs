@@ -32,17 +32,9 @@ impl Vec3 {
         )
     }
 
-    pub fn i() -> Vec3 {
-        Vec3::new(1.0, 0.0, 0.0)
-    }
-
-    pub fn j() -> Vec3 {
-        Vec3::new(0.0, 1.0, 0.0)
-    }
-
-    pub fn k() -> Vec3 {
-        Vec3::new(0.0, 0.0, 1.0)
-    }
+    pub const I: Vec3 = Vec3 { x: 1.0, y: 0.0, z: 0.0 };
+    pub const J: Vec3 = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
+    pub const K: Vec3 = Vec3 { x: 0.0, y: 0.0, z: 1.0 };
 
     pub fn len_squared(&self) -> f64 {
         self.x * self.x + self.y * self.y + self.z * self.z
@@ -103,3 +95,8 @@ impl MulAssign<f64> for Vec3 {
     }
 }
 
+impl Default for Vec3 {
+    fn default() -> Self {
+        Vec3::new(0.0, 0.0, 0.0)
+    }
+}

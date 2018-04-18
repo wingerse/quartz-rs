@@ -9,6 +9,8 @@ pub struct BlockID {
 }
 
 impl BlockID {
+    pub const AIR: BlockID = BlockID { typ: 0, meta: 0 };
+    
     pub fn new(typ: u8, meta: u8) -> BlockID {
         BlockID {
             typ,
@@ -23,11 +25,9 @@ impl BlockID {
     pub fn get_meta(&self) -> u8 { self.meta }
 
     pub fn set_meta(&mut self, meta: u8) { self.meta = meta & 0x0f; }
+
+    pub fn as_u16(&self) -> u16 { ((self.typ as u16) << 4) | self.meta as u16 }
 }
-
-pub const AIR_BLOCK_ID: BlockID = BlockID { typ: 0, meta: 0 };
-
-pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
 
 #[derive(Debug)]
 pub struct ChunkSection {
@@ -40,17 +40,19 @@ pub struct ChunkSection {
 }
 
 impl ChunkSection {
+    const BLOCK_COUNT: usize = 16 * 16 * 16;
+    
     pub fn new(has_sky_light: bool) -> ChunkSection {
         ChunkSection {
-            palette: vec![AIR_BLOCK_ID],
-            blocks: VarbitArray::new(4, CHUNK_SECTION_BLOCK_COUNT),
-            block_light: NibbleArray::new(CHUNK_SECTION_BLOCK_COUNT),
+            palette: vec![BlockID::AIR],
+            blocks: VarbitArray::new(4, Self::BLOCK_COUNT),
+            block_light: NibbleArray::new_with_default(Self::BLOCK_COUNT, 15),
             sky_light: if has_sky_light {
-                Some(NibbleArray::new_with_default(CHUNK_SECTION_BLOCK_COUNT, 15))
+                Some(NibbleArray::new_with_default(Self::BLOCK_COUNT, 15))
             } else {
                 None
             },
-            air_count: CHUNK_SECTION_BLOCK_COUNT as u16,
+            air_count: Self::BLOCK_COUNT as u16,
         }
     }
 
@@ -68,14 +70,15 @@ impl ChunkSection {
             return;
         }
 
-        if previous == AIR_BLOCK_ID {
+        if previous == BlockID::AIR {
             self.air_count -= 1;
-        } else if b == AIR_BLOCK_ID {
+        } else if b == BlockID::AIR {
             self.air_count += 1;
         }
 
         if let Some(index) = self.palette.iter().position(|&e| e == b) {
-            self.blocks.set(Self::get_linear_index(x, y, z), index as u64);
+            let pos = Self::get_linear_index(x, y, z);
+            self.blocks.set(pos, index as u64);
         } else {
             self.palette.push(b);
 
@@ -91,7 +94,7 @@ impl ChunkSection {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.air_count == CHUNK_SECTION_BLOCK_COUNT as u16
+        self.air_count == Self::BLOCK_COUNT as u16
     }
 
     pub fn set_block_light(&mut self, x: u8, y: u8, z: u8, light: u8) {
@@ -116,29 +119,31 @@ impl ChunkSection {
     }
 
     pub fn to_proto_chunk_section(&self) -> data::ChunkSection {
-        let mut blocks = [0; CHUNK_SECTION_BLOCK_COUNT * 2];
+        let mut blocks = [0; Self::BLOCK_COUNT * 2];
 
         let mut blocks_index = 0;
         for y in 0..16 {
             for z in 0..16 {
                 for x in 0..16 {
                     let b = self.get_block(x, y, z);
-                    blocks[blocks_index] = b.get_type();
-                    blocks[blocks_index + 1] = b.get_meta();
+                    let short = b.as_u16();
+                    // little endian
+                    blocks[blocks_index] = short as u8;
+                    blocks[blocks_index + 1] = (short >> 8) as u8;
                     blocks_index += 2;
                 }
             }
         }
 
-        let mut block_light = [0; CHUNK_SECTION_BLOCK_COUNT / 2];
+        let mut block_light = [0; Self::BLOCK_COUNT / 2];
         for (i, &light) in self.block_light.as_bytes().iter().enumerate() {
             block_light[i] = light;
         }
 
-        let mut sky_light = None; //Option<[u8; CHUNK_SECTION_BLOCK_COUNT / 2]>;
+        let mut sky_light = None; //Option<[u8; Self::BLOCK_COUNT / 2]>;
 
         if let Some(ref s) = self.sky_light {
-            let mut temp = [0; CHUNK_SECTION_BLOCK_COUNT / 2];
+            let mut temp = [0; Self::BLOCK_COUNT / 2];
             for (i, &light) in s.as_bytes().iter().enumerate() {
                 temp[i] = light;
             }
@@ -165,14 +170,14 @@ impl ChunkPos {
 pub struct Chunk {
     pos: ChunkPos,
     sections: [Option<ChunkSection>; 16],
-    /// biomes as xz
+    /// biomes as zx
     biomes: [[u8; 16]; 16],
     has_sky_light: bool,
 }
 
 impl Chunk {
-    pub fn new(x: i32, z: i32, has_sky_light: bool) -> Chunk {
-        Chunk { pos: ChunkPos::new(x, z), sections: Default::default(), biomes: [[0; 16]; 16], has_sky_light }
+    pub fn new(pos: ChunkPos, has_sky_light: bool) -> Chunk {
+        Chunk { pos, sections: Default::default(), biomes: [[0; 16]; 16], has_sky_light }
     }
 
     pub fn get_pos(&self) -> ChunkPos {
@@ -190,8 +195,8 @@ impl Chunk {
     pub fn get_block(&self, x: u8, y: u8, z: u8) -> BlockID {
         let sec = self.get_section(y);
         match *sec {
-            Some(ref sec) => sec.get_block(x, y, z),
-            None => AIR_BLOCK_ID
+            Some(ref sec) => sec.get_block(x, y % 16, z),
+            None => BlockID::AIR
         }
     }
 
@@ -202,18 +207,18 @@ impl Chunk {
         let mut empty = false;
         match *sec {
             Some(ref mut s) => {
-                s.set_block(x, y, z, b);
+                s.set_block(x, y % 16, z, b);
                 if s.is_empty() {
                     empty = true;
                 }
             }
             None => {
-                if b == AIR_BLOCK_ID {
+                if b == BlockID::AIR {
                     return;
                 }
 
                 let mut section = ChunkSection::new(has_sky_light);
-                section.set_block(x, y, z, b);
+                section.set_block(x, y % 16, z, b);
                 *sec = Some(section);
                 return;
             }
@@ -227,7 +232,7 @@ impl Chunk {
     pub fn get_block_light(&self, x: u8, y: u8, z: u8) -> u8 {
         let sec = self.get_section(y);
         match *sec {
-            Some(ref sec) => sec.get_block_light(x, y, z),
+            Some(ref sec) => sec.get_block_light(x, y % 16, z),
             None => 0,
         }
     }
@@ -235,14 +240,14 @@ impl Chunk {
     pub fn set_block_light(&mut self, x: u8, y: u8, z: u8, light: u8) {
         let sec = self.get_section_mut(y);
         if let Some(ref mut sec) = *sec {
-            sec.set_block_light(x, y, z, light);
+            sec.set_block_light(x, y % 16, z, light);
         }
     }
 
     pub fn get_sky_light(&self, x: u8, y: u8, z: u8) -> u8 {
         let sec = self.get_section(y);
         match *sec {
-            Some(ref sec) => sec.get_sky_light(x, y, z),
+            Some(ref sec) => sec.get_sky_light(x, y % 16, z),
             None => 0,
         }
     }
@@ -250,7 +255,7 @@ impl Chunk {
     pub fn set_sky_light(&mut self, x: u8, y: u8, z: u8, light: u8) {
         let sec = self.get_section_mut(y);
         if let Some(ref mut sec) = *sec {
-            sec.set_sky_light(x, y, z, light);
+            sec.set_sky_light(x, y % 16, z, light);
         }
     }
 
@@ -279,5 +284,29 @@ impl Chunk {
             primary_bit_mask,
             data,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Instant, Duration};
+    #[test]
+    fn test() {
+        let x0 = Instant::now();
+        let mut chunk = Chunk::new(ChunkPos::new(0, 0), true);
+        for y in 0..40 {
+            for z in 0..16 {
+                for x in 0..16 {
+                    chunk.set_block(x, y, z, BlockID::new(y, 0));
+                }
+            }
+        }
+        let x1 = Instant::now();
+        let dur = x1 - x0;
+        let secs = dur.as_secs() as f64 + dur.subsec_nanos() as f64 / 1_000_000_000.0;
+
+        println!("{}", secs);
+        panic!();
     }
 }
