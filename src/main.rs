@@ -21,6 +21,7 @@ mod collections;
 mod entity;
 mod math;
 mod inventory;
+mod util;
 
 fn main() {
     let mut s = match server::Server::new(SocketAddr::new(Ipv4Addr::new(127, 0, 0, 1).into(), 25565)) {

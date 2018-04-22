@@ -7,7 +7,7 @@ pub enum ClickAction {
     ChangePage,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ClickEvent {
     pub action: ClickAction,
     pub value: String,
@@ -22,7 +22,7 @@ pub enum HoverAction {
     ShowAchievement,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HoverEvent {
     pub action: HoverAction,
     pub value: String,

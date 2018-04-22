@@ -12,7 +12,7 @@ pub use self::color::*;
 mod events;
 pub use self::events::*;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Base {
     #[serde(skip_serializing_if = "Option::is_none")] pub bold: Option<bool>,
@@ -44,13 +44,13 @@ impl Base {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct StringComponent {
     #[serde(flatten)] pub base: Base,
     pub text: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TranslationComponent {
     #[serde(flatten)] pub base: Base,
     pub translate: String,
@@ -59,7 +59,7 @@ pub struct TranslationComponent {
     pub with: Option<Vec<Wrapper>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Score {
     pub name: String,
     pub objective: String,
@@ -68,19 +68,19 @@ pub struct Score {
     pub value: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ScoreComponent {
     #[serde(flatten)] pub base: Base,
     pub score: Score,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SelectorComponent {
     #[serde(flatten)] pub base: Base,
     pub selector: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum Component {
     String(StringComponent),
@@ -124,7 +124,7 @@ impl Component {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct Wrapper(pub Component);
 
 impl<'de> Deserialize<'de> for Wrapper {
@@ -178,8 +178,8 @@ impl<'de> Deserialize<'de> for Wrapper {
     }
 }
 
+#[derive(Debug, Serialize, Clone)]
 // box to reduce size.
-#[derive(Debug, Serialize)]
 pub struct Chat(pub Box<Wrapper>);
 
 impl From<Component> for Chat {

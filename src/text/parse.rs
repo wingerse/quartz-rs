@@ -1,5 +1,5 @@
 use std::iter::Iterator;
-use text::{Code, Token, Tokenizer};
+use text::{Code, Token, Tokenizer, LEGACY_CHAR};
 use text::chat::{Component, StringComponent, Wrapper, Chat};
 
 fn strip_codes(codes: &[Code]) -> &[Code] {
@@ -57,7 +57,13 @@ fn get_last_formatting(root: &mut StringComponent) -> &mut StringComponent {
 }
 
 /// Parses legacy minecraft chat into json chat format. Not the most optimized but works well.
-pub fn parse_legacy(s: &str, control_char: char) -> StringComponent {
+/// You need to use the LEGACY_CHAR for formatting. Code implements display which uses LEGACY_CHAR so use format! here.
+pub fn parse_legacy(s: &str) -> Component {
+    parse_legacy_ex(s, LEGACY_CHAR)
+}
+
+/// parse_legacy, but allows u to change control character from LEGACY_CHAR to something else. Usually '&'
+pub fn parse_legacy_ex(s: &str, control_char: char) -> Component {
     /*
     ha &k&o aa &4 hi &l hello &o&k world &a hola
     
@@ -118,7 +124,7 @@ pub fn parse_legacy(s: &str, control_char: char) -> StringComponent {
         }
     }
 
-    root
+    Component::from(root)
 }
 
 #[cfg(test)]
@@ -127,8 +133,8 @@ mod test {
     #[test]
     fn test_parse() {
         let s = "&6&l&kii&4&lWigit&6&l&kii";
-        let component = parse_legacy(s, '&');
-        let res = ::serde_json::to_string(&Chat::from(Component::from(component))).unwrap();
+        let component = parse_legacy_ex(s, '&');
+        let res = ::serde_json::to_string(&Chat::from(component)).unwrap();
         assert_eq!(res, r#"{"extra":[{"extra":[{"text":""}],"text":""},{"color":"gold","extra":[{"bold":true,"obfuscated":true,"text":"ii"}],"text":""},{"color":"dark_red","extra":[{"bold":true,"text":"Wigit"}],"text":""},{"color":"gold","extra":[{"bold":true,"obfuscated":true,"text":"ii"}],"text":""}],"text":""}"#);
     }
 }

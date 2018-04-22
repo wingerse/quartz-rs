@@ -1,14 +1,16 @@
-use binary::*;
-use nbt::NBT;
-use serde_json;
 use std::io;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
+use std::collections::HashSet;
+
+use serde_json;
+use uuid::Uuid;
+
+use binary::*;
+use nbt::NBT;
 use proto::{data, Error, Result, State};
 use text;
 use text::chat::Chat;
-use uuid;
-use std::collections::HashSet;
 
 #[derive(Debug)]
 pub enum CPacket {
@@ -132,7 +134,7 @@ pub enum CPacket {
         data: Vec<u8>,
     },
     PlaySpectate {
-        target_player: uuid::Uuid,
+        target_player: Uuid,
     },
     PlayResourcePackStatus {
         hash: String,
@@ -347,7 +349,7 @@ pub enum SPacket {
     },
     PlayChatMessage {
         message: Chat,
-        position: i8,
+        position: text::ChatPos,
     },
     PlayTimeUpdate {
         world_age: i64,
@@ -393,7 +395,7 @@ pub enum SPacket {
     },
     PlaySpawnPlayer {
         entity_id: i32,
-        uuid: uuid::Uuid,
+        uuid: Uuid,
         x: f64,
         y: f64,
         z: f64,
@@ -656,8 +658,7 @@ pub enum SPacket {
         statistics: Vec<(&'static str, i32)>,
     },
     PlayPlayerListItem {
-        uuid: uuid::Uuid,
-        players: Vec<SPlayPlayerListItemData>,
+        players: Vec<Arc<SPlayPlayerListItemData>>,
     },
     PlayPlayerAbilities {
         flags: i8,
@@ -851,7 +852,7 @@ impl SPacket {
                 position,
             } => {
                 message.write_proto(w)?;
-                write_byte(w, position)?;
+                write_byte(w, position as i8)?;
             }
             SPacket::PlayTimeUpdate {
                 world_age,
@@ -1470,26 +1471,26 @@ impl SPacket {
                     write_varint(w, s.1)?;
                 }
             }
-            SPacket::PlayPlayerListItem { uuid, ref players } => {
+            SPacket::PlayPlayerListItem { ref players } => {
                 if players.is_empty() {
                     write_varint(w, 0)?;
                     write_varint(w, 0)?;
                 } else {
-                    let action = match players[0] {
-                        SPlayPlayerListItemData::AddPlayer { .. } => 0,
-                        SPlayPlayerListItemData::UpdateGamemode { .. } => 1,
-                        SPlayPlayerListItemData::UpdateLatency { .. } => 2,
-                        SPlayPlayerListItemData::UpdateDisplayName { .. } => 3,
-                        SPlayPlayerListItemData::RemovePlayer { .. } => 4,
+                    let action = match players[0].action {
+                        SPlayPlayerListItemDataAction::AddPlayer { .. } => 0,
+                        SPlayPlayerListItemDataAction::UpdateGamemode { .. } => 1,
+                        SPlayPlayerListItemDataAction::UpdateLatency { .. } => 2,
+                        SPlayPlayerListItemDataAction::UpdateDisplayName { .. } => 3,
+                        SPlayPlayerListItemDataAction::RemovePlayer { .. } => 4,
                     };
                     write_varint(w, action)?;
                     write_varint(w, players.len() as i32)?;
                 }
 
-                data::write_uuid(w, &uuid)?;
                 for p in players {
-                    match *p {
-                        SPlayPlayerListItemData::AddPlayer {
+                    data::write_uuid(w, &p.uuid)?;
+                    match p.action {
+                        SPlayPlayerListItemDataAction::AddPlayer {
                             ref name,
                             ref properties,
                             gamemode,
@@ -1497,6 +1498,7 @@ impl SPacket {
                             ref display_name,
                         } => {
                             data::write_string(w, name)?;
+                            write_varint(w, properties.len() as i32)?;
                             for p in properties {
                                 data::write_string(w, &p.name)?;
                                 data::write_string(w, &p.value)?;
@@ -1515,23 +1517,23 @@ impl SPacket {
                                     write_bool(w, true)?;
                                     name.write_proto(w)?;
                                 }
-                                None => write_bool(w, true)?,
+                                None => write_bool(w, false)?,
                             }
                         }
-                        SPlayPlayerListItemData::UpdateGamemode { gamemode } => {
+                        SPlayPlayerListItemDataAction::UpdateGamemode { gamemode } => {
                             write_varint(w, gamemode)?
                         }
-                        SPlayPlayerListItemData::UpdateLatency { ping } => write_varint(w, ping)?,
-                        SPlayPlayerListItemData::UpdateDisplayName { ref display_name } => {
+                        SPlayPlayerListItemDataAction::UpdateLatency { ping } => write_varint(w, ping)?,
+                        SPlayPlayerListItemDataAction::UpdateDisplayName { ref display_name } => {
                             match *display_name {
                                 Some(ref name) => {
                                     write_bool(w, true)?;
                                     name.write_proto(w)?;
                                 }
-                                None => write_bool(w, true)?,
+                                None => write_bool(w, false)?,
                             }
                         }
-                        SPlayPlayerListItemData::RemovePlayer => (),
+                        SPlayPlayerListItemDataAction::RemovePlayer => (),
                     }
                 }
             }
@@ -1949,7 +1951,13 @@ pub struct SPlayerListItemProperty {
 }
 
 #[derive(Debug)]
-pub enum SPlayPlayerListItemData {
+pub struct SPlayPlayerListItemData {
+    pub uuid: Uuid,
+    pub action: SPlayPlayerListItemDataAction,
+}
+
+#[derive(Debug)]
+pub enum SPlayPlayerListItemDataAction {
     AddPlayer {
         name: String,
         properties: Vec<SPlayerListItemProperty>,

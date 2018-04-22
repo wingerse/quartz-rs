@@ -29,9 +29,11 @@ impl BlockID {
     pub fn as_u16(&self) -> u16 { ((self.typ as u16) << 4) | self.meta as u16 }
 }
 
+pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
+
 #[derive(Debug)]
 pub struct ChunkSection {
-    // this is not used in 1.8 but saves memory
+    // this is not used in 1.8 but saves memory as much as 2x, sacrificing performance a bit.
     palette: Vec<BlockID>,
     blocks: VarbitArray,
     block_light: NibbleArray,
@@ -40,19 +42,17 @@ pub struct ChunkSection {
 }
 
 impl ChunkSection {
-    const BLOCK_COUNT: usize = 16 * 16 * 16;
-    
     pub fn new(has_sky_light: bool) -> ChunkSection {
         ChunkSection {
             palette: vec![BlockID::AIR],
-            blocks: VarbitArray::new(4, Self::BLOCK_COUNT),
-            block_light: NibbleArray::new_with_default(Self::BLOCK_COUNT, 15),
+            blocks: VarbitArray::new(4, CHUNK_SECTION_BLOCK_COUNT),
+            block_light: NibbleArray::new_with_default(CHUNK_SECTION_BLOCK_COUNT, 15),
             sky_light: if has_sky_light {
-                Some(NibbleArray::new_with_default(Self::BLOCK_COUNT, 15))
+                Some(NibbleArray::new_with_default(CHUNK_SECTION_BLOCK_COUNT, 15))
             } else {
                 None
             },
-            air_count: Self::BLOCK_COUNT as u16,
+            air_count: CHUNK_SECTION_BLOCK_COUNT as u16,
         }
     }
 
@@ -94,7 +94,7 @@ impl ChunkSection {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.air_count == Self::BLOCK_COUNT as u16
+        self.air_count == CHUNK_SECTION_BLOCK_COUNT as u16
     }
 
     pub fn set_block_light(&mut self, x: u8, y: u8, z: u8, light: u8) {
@@ -119,7 +119,7 @@ impl ChunkSection {
     }
 
     pub fn to_proto_chunk_section(&self) -> data::ChunkSection {
-        let mut blocks = [0; Self::BLOCK_COUNT * 2];
+        let mut blocks = [0; CHUNK_SECTION_BLOCK_COUNT * 2];
 
         let mut blocks_index = 0;
         for y in 0..16 {
@@ -135,15 +135,15 @@ impl ChunkSection {
             }
         }
 
-        let mut block_light = [0; Self::BLOCK_COUNT / 2];
+        let mut block_light = [0; CHUNK_SECTION_BLOCK_COUNT / 2];
         for (i, &light) in self.block_light.as_bytes().iter().enumerate() {
             block_light[i] = light;
         }
 
-        let mut sky_light = None; //Option<[u8; Self::BLOCK_COUNT / 2]>;
+        let mut sky_light = None;
 
         if let Some(ref s) = self.sky_light {
-            let mut temp = [0; Self::BLOCK_COUNT / 2];
+            let mut temp = [0; CHUNK_SECTION_BLOCK_COUNT / 2];
             for (i, &light) in s.as_bytes().iter().enumerate() {
                 temp[i] = light;
             }
@@ -284,29 +284,5 @@ impl Chunk {
             primary_bit_mask,
             data,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{Instant, Duration};
-    #[test]
-    fn test() {
-        let x0 = Instant::now();
-        let mut chunk = Chunk::new(ChunkPos::new(0, 0), true);
-        for y in 0..40 {
-            for z in 0..16 {
-                for x in 0..16 {
-                    chunk.set_block(x, y, z, BlockID::new(y, 0));
-                }
-            }
-        }
-        let x1 = Instant::now();
-        let dur = x1 - x0;
-        let secs = dur.as_secs() as f64 + dur.subsec_nanos() as f64 / 1_000_000_000.0;
-
-        println!("{}", secs);
-        panic!();
     }
 }

@@ -8,6 +8,13 @@ mod parse;
 pub use self::parse::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatPos {
+    Normal,
+    SystemMessage,
+    AboveHotbar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Code {
     Black,
     DarkBlue,
@@ -153,16 +160,19 @@ struct Tokenizer {
 
 impl Tokenizer {
     fn new(s: &str, control_char: char) -> Tokenizer {
+        let chars: Vec<char> = s.chars().collect();
+        let len = chars.len();
         Tokenizer {
-            index: -1, chars: s.chars().collect(), 
+            index: -1,
+            chars,
             has_invalid_code: false, 
-            len: s.len(), 
+            len,
             control_char
         }
     }
 
     fn has_next(&self) -> bool {
-        self.index != (self.len - 1) as isize
+        self.index < (self.len - 1) as isize
     }
 
     fn next(&mut self) -> char {
@@ -247,5 +257,15 @@ mod test {
         assert_eq!(Token::Codes(vec![Code::Gold, Code::Bold, Code::Obfuscated]), o);
         o = Iterator::next(&mut t).unwrap();
         assert_eq!(Token::String("ii".into()), o);
+    }
+
+    #[test]
+    fn test_tokenizer_wide_chars() {
+        let s = &format!("{}{}Quartz server", Code::DarkBlue, Code::Bold);
+        let mut t = Tokenizer::new(s, LEGACY_CHAR);
+        let mut o = Iterator::next(&mut t).unwrap();
+        assert_eq!(Token::Codes(vec![Code::DarkBlue, Code::Bold]), o);
+        o = Iterator::next(&mut t).unwrap();
+        assert_eq!(Token::String("Quartz server".into()), o);
     }
 }

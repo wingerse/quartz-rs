@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread::{self, JoinHandle};
 use std::collections::HashSet;
+use std::error::Error as StdError;
 
 use uuid::{self, Uuid};
 
@@ -43,11 +44,13 @@ impl NetworkServer {
         running: Arc<Mutex<bool>>,
         incoming_players: Sender<Player>,
     ) -> NetworkServer {
-        let mut p = HashSet::new();
-        p.insert(SStatusResponsePlayer {name: "Notch".into(), id: Uuid::new_v3(&uuid::NAMESPACE_URL, &"OfflinePlayer:Notch").hyphenated().to_string()});
-
-        let player_list = Arc::new(Mutex::new(p));
-        NetworkServer { addr, favicon: Arc::new(favicon), running, incoming_players, player_list }
+        NetworkServer {
+            addr,
+            favicon: Arc::new(favicon),
+            running,
+            incoming_players,
+            player_list: Arc::new(Mutex::new(HashSet::new())),
+        }
     }
 
     pub fn start(&mut self) -> Result<(), Error> {
@@ -69,7 +72,7 @@ impl NetworkServer {
                 // TODO: async io
                 thread::spawn(move || {
                     if let Err(e) = NetworkServer::handle_client(&stream, addr, favicon, incoming_players, player_list) {
-                        println!("{} has been disconnected for error: {}", addr, e);
+                        println!("{} has been disconnected for error: {:?}", addr, e);
                     }
                 });
             }
@@ -102,7 +105,7 @@ impl NetworkServer {
         }
     }
 
-    pub fn handle_status<R: Read + Send + 'static, W: Write + Send + 'static>(
+    fn handle_status<R: Read + Send + 'static, W: Write + Send + 'static>(
         mut reader: Reader<R>,
         mut writer: Writer<W>,
         favicon: Arc<Option<String>>,
@@ -158,7 +161,7 @@ impl NetworkServer {
         Ok(())
     }
 
-    pub fn handle_login<R: Read + Send + 'static, W: Write + Send + 'static>(
+    fn handle_login<R: Read + Send + 'static, W: Write + Send + 'static>(
         mut reader: Reader<R>,
         mut writer: Writer<W>,
         addr: SocketAddr,
@@ -178,7 +181,7 @@ impl NetworkServer {
 
                 // check if player is already logged in
                 if player_list.lock().unwrap().contains(&response_player) {
-                    writer.write_packet(&SPacket::LoginDisconnect {reason: Chat::from(Component::from(text::parse_legacy("You are already logged in", '&')))})?;
+                    writer.write_packet(&SPacket::LoginDisconnect {reason: Chat::from(text::parse_legacy("You are already logged in"))})?;
                     return Ok(());
                 }
 
@@ -208,7 +211,13 @@ impl NetworkServer {
         }
     }
 
-    pub fn handle_play<R: Read + Send + 'static, W: Write + Send + 'static>(
+    // Repeatedly reads from client and sends to client.
+    // When the server disconnects a player deliberately, connected_s will be set to false and other end of the channels will be dropped.
+    // send_thread will return immediately then, and receiving thread will eventually return (when read_packet returns error or timeout)
+    // TODO: make this return immediately as well
+    // If an error occurs from this side from one thread, that thread will return,
+    // connected_s will be set to false and the server will follow the same procedure as above.
+    fn handle_play<R: Read + Send + 'static, W: Write + Send + 'static>(
         mut reader: Reader<R>,
         mut writer: Writer<W>,
         connected: Arc<Mutex<bool>>,
@@ -226,11 +235,14 @@ impl NetworkServer {
             while *connected_s.lock().unwrap() {
                 let packet = receiver.recv();
                 match packet {
-                    Ok(p) => writer.write_packet(&p).or_else(|e| {
-                        *connected_s.lock().unwrap() = false;
-                        Err(e)
-                    })?,
-                    Err(_) => break, // send side is dropped when player is deallocated. That's gonna happen after player sets connected to false.
+                    Ok(p) => {
+                        // TODO: handle normal disconnect here. Connection aborted or reset?
+                        if let Err(e) = writer.write_packet(&p) {
+                            *connected_s.lock().unwrap() = false;
+                            return Err(From::from(e))
+                        }
+                    }
+                    Err(_) => break,// send side is dropped when player is deallocated. That's gonna happen after player sets connected to false.
                 }
             }
 
@@ -246,9 +258,17 @@ impl NetworkServer {
                     if let Err(_) = sender.send(p) {
                         break;
                     }
-                },
+                }
                 Err(e) => {
                     *connected.lock().unwrap() = false;
+                    // normal disconnect
+                    // TODO: make this better. need to check if cause is an io error and that it's kind() is unexpectedeof
+                    // but I can't downcast cause(), too bad.
+                    if let Some(cause) = e.cause() {
+                        if cause.description() == "failed to fill whole buffer" {
+                            break;
+                        }
+                    }
                     err = Err(e);
                     break;
                 }

@@ -1,9 +1,12 @@
+use std::fmt::{self, Debug};
+use std::io::{self, BufRead, Read, Write};
+
+use uuid;
+
 use binary;
 use nbt;
 use proto::Result;
-use std::fmt::{self, Debug};
-use std::io::{self, BufRead, Read, Write};
-use uuid;
+use world::chunk::CHUNK_SECTION_BLOCK_COUNT;
 
 pub fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
     binary::write_varint(w, s.len() as i32)?;
@@ -106,7 +109,7 @@ impl Position {
     pub fn read<R: Read>(r: &mut R) -> Result<Position> {
         let val = binary::read_long(r)?;
         let x = (val >> 38) as i32;
-        let y = (val << 26 >> 38) as i32;
+        let y = ((val << 26) >> 52) as i32;
         let z = (val as i32) << 6 >> 6;
         Ok(Position {x, y, z})
     }
@@ -120,7 +123,7 @@ pub enum MetadataEntry {
     Float(f32),
     String(String),
     Slot(SlotData),
-    Pos{
+    Pos {
         x: i32,
         y: i32,
         z: i32,
@@ -200,8 +203,6 @@ impl ModifierData {
         Ok(ModifierData{uuid, amount, operation})
     }
 }
-
-pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
 
 pub struct ChunkSection {
     pub blocks: [u8; CHUNK_SECTION_BLOCK_COUNT * 2],
