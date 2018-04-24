@@ -169,7 +169,7 @@ impl ChunkPos {
 #[derive(Debug)]
 pub struct Chunk {
     pos: ChunkPos,
-    sections: [Option<ChunkSection>; 16],
+    sections: [Option<Box<ChunkSection>>; 16],
     /// biomes as zx
     biomes: [[u8; 16]; 16],
     has_sky_light: bool,
@@ -184,11 +184,11 @@ impl Chunk {
         self.pos
     }
 
-    fn get_section(&self, y: u8) -> &Option<ChunkSection> {
+    fn get_section(&self, y: u8) -> &Option<Box<ChunkSection>> {
         &self.sections[(y / 16) as usize]
     }
 
-    fn get_section_mut(&mut self, y: u8) -> &mut Option<ChunkSection> {
+    fn get_section_mut(&mut self, y: u8) -> &mut Option<Box<ChunkSection>> {
         &mut self.sections[(y / 16) as usize]
     }
 
@@ -204,13 +204,9 @@ impl Chunk {
         let has_sky_light = self.has_sky_light;
 
         let sec = self.get_section_mut(y);
-        let mut empty = false;
         match *sec {
             Some(ref mut s) => {
                 s.set_block(x, y % 16, z, b);
-                if s.is_empty() {
-                    empty = true;
-                }
             }
             None => {
                 if b == BlockID::AIR {
@@ -219,13 +215,9 @@ impl Chunk {
 
                 let mut section = ChunkSection::new(has_sky_light);
                 section.set_block(x, y % 16, z, b);
-                *sec = Some(section);
+                *sec = Some(Box::new(section));
                 return;
             }
-        }
-
-        if empty {
-            *sec = None;
         }
     }
 
@@ -259,18 +251,26 @@ impl Chunk {
         }
     }
 
-    /// returns a ChunkData packet.
-    pub fn to_proto_chunk_data(&self, ground_up_continuous: bool) -> SPacket {
-        let mut primary_bit_mask = 0;
+    pub const FULL_BIT_MASK: u16 = !0;
 
+    /// returns a ChunkData packet.
+    /// bit_mask hints at what chunk sections to send. If it is a FULL_BIT_MASK, ground_up_continuous is sent where empty chunk sections aren't sent.
+    /// If not, chunk sections are sent even if they are empty, but not if it was never created. (null)
+    pub fn to_proto_chunk_data(&self, bit_mask: u16) -> SPacket {
+        let ground_up_continuous = bit_mask == Self::FULL_BIT_MASK;
+
+        let mut primary_bit_mask = 0;
         let data = {
             let mut sections = Vec::with_capacity(self.sections.iter().filter(|x| x.is_some()).count());
             for (i, sec) in self.sections.iter().enumerate() {
                 if let Some(ref s) = *sec {
-                    primary_bit_mask |= 1 << i;
-                    sections.push(s.to_proto_chunk_section());
+                    if bit_mask & (1 << i) != 0 && !(ground_up_continuous && s.is_empty()) {
+                        primary_bit_mask |= (1 << i);
+                        sections.push(s.to_proto_chunk_section());
+                    }
                 }
             }
+
             if ground_up_continuous {
                 SPlayChunkDataData::GroundUpContinuous(GroundUpContinuous { sections: GroundUpNonContinuous { sections }, biome_array: Box::new(self.biomes) })
             } else {
@@ -283,6 +283,18 @@ impl Chunk {
             chunk_z: self.pos.z,
             primary_bit_mask,
             data,
+        }
+    }
+
+    pub fn empty_proto_chunk_data(&self) -> SPacket {
+        SPacket::PlayChunkData {
+            chunk_x: self.pos.x,
+            chunk_z: self.pos.z,
+            primary_bit_mask: 0,
+            data: SPlayChunkDataData::GroundUpContinuous(GroundUpContinuous {
+                sections: GroundUpNonContinuous { sections: Vec::new() },
+                biome_array: Box::new(self.biomes)
+            }),
         }
     }
 }

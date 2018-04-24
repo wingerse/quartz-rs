@@ -24,11 +24,10 @@ mod inventory;
 mod util;
 
 fn main() {
-    let mut s = match server::Server::new(SocketAddr::new(Ipv4Addr::new(127, 0, 0, 1).into(), 25565)) {
+    let mut s = match server::Server::new(SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 25565)) {
         Ok(s) => s,
         Err(e) => panic!("error creating server: {}", e),
     };
-
 
     if let Err(e) = s.start() {
         panic!("error starting server: {}", e);
