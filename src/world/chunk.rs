@@ -1,6 +1,10 @@
+use std::collections::HashSet;
+
+use uuid::Uuid;
+
 use collections::{NibbleArray, VarbitArray};
 use proto::data::{self, GroundUpContinuous, GroundUpNonContinuous};
-use proto::packets::{SPacket, SPlayChunkDataData};
+use proto::packets::{SPacket, SPlayChunkDataData, SPlayMapChunkBulkData};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockID {
@@ -10,7 +14,7 @@ pub struct BlockID {
 
 impl BlockID {
     pub const AIR: BlockID = BlockID { typ: 0, meta: 0 };
-    
+
     pub fn new(typ: u8, meta: u8) -> BlockID {
         BlockID {
             typ,
@@ -173,15 +177,29 @@ pub struct Chunk {
     /// biomes as zx
     biomes: [[u8; 16]; 16],
     has_sky_light: bool,
+    players_who_see_this: HashSet<Uuid>,
+    players: HashSet<Uuid>,
 }
 
 impl Chunk {
     pub fn new(pos: ChunkPos, has_sky_light: bool) -> Chunk {
-        Chunk { pos, sections: Default::default(), biomes: [[0; 16]; 16], has_sky_light }
+        Chunk {
+            pos,
+            sections: Default::default(),
+            biomes: [[0; 16]; 16],
+            has_sky_light,
+            players_who_see_this: HashSet::new(),
+            players: HashSet::new()
+        }
     }
 
     pub fn get_pos(&self) -> ChunkPos {
         self.pos
+    }
+
+    /// returns true when there is no player who see this chunk.
+    pub fn is_abandoned(&self) -> bool {
+        self.players_who_see_this.len() == 0
     }
 
     fn get_section(&self, y: u8) -> &Option<Box<ChunkSection>> {
@@ -190,6 +208,26 @@ impl Chunk {
 
     fn get_section_mut(&mut self, y: u8) -> &mut Option<Box<ChunkSection>> {
         &mut self.sections[(y / 16) as usize]
+    }
+
+    pub fn insert_player(&mut self, p: Uuid) {
+        self.players.insert(p);
+    }
+
+    pub fn remove_player(&mut self, p: &Uuid) {
+        self.players.remove(p);
+    }
+
+    pub fn players_iter(&self) -> impl Iterator<Item=&Uuid> {
+        self.players.iter()
+    }
+
+    pub fn insert_player_who_see(&mut self, p: Uuid) {
+        self.players_who_see_this.insert(p);
+    }
+
+    pub fn remove_player_who_see(&mut self, p: &Uuid) {
+        self.players_who_see_this.remove(p);
     }
 
     pub fn get_block(&self, x: u8, y: u8, z: u8) -> BlockID {
@@ -265,7 +303,7 @@ impl Chunk {
             for (i, sec) in self.sections.iter().enumerate() {
                 if let Some(ref s) = *sec {
                     if bit_mask & (1 << i) != 0 && !(ground_up_continuous && s.is_empty()) {
-                        primary_bit_mask |= (1 << i);
+                        primary_bit_mask |= 1 << i;
                         sections.push(s.to_proto_chunk_section());
                     }
                 }
@@ -286,15 +324,42 @@ impl Chunk {
         }
     }
 
-    pub fn empty_proto_chunk_data(&self) -> SPacket {
-        SPacket::PlayChunkData {
+    pub fn to_proto_map_chunk_bulk_data(&self) -> SPlayMapChunkBulkData {
+        let mut primary_bit_mask = 0;
+        let chunk = {
+            let mut sections = Vec::with_capacity(self.sections.iter().filter(|x| x.is_some() && !x.as_ref().unwrap().is_empty()).count());
+            for (i, sec) in self.sections.iter().enumerate() {
+                if let Some(ref s) = *sec {
+                    if !s.is_empty() {
+                        primary_bit_mask |= 1 << i;
+                        sections.push(s.to_proto_chunk_section());
+                    }
+                }
+            }
+
+
+            GroundUpContinuous { sections: GroundUpNonContinuous { sections }, biome_array: Box::new(self.biomes) }
+        };
+
+        SPlayMapChunkBulkData {
             chunk_x: self.pos.x,
             chunk_z: self.pos.z,
+            primary_bit_mask,
+            chunk,
+        }
+    }
+
+    pub fn empty_proto_chunk_data(pos: ChunkPos) -> SPacket {
+        SPacket::PlayChunkData {
+            chunk_x: pos.x,
+            chunk_z: pos.z,
             primary_bit_mask: 0,
-            data: SPlayChunkDataData::GroundUpContinuous(GroundUpContinuous {
-                sections: GroundUpNonContinuous { sections: Vec::new() },
-                biome_array: Box::new(self.biomes)
-            }),
+            data: SPlayChunkDataData::GroundUpContinuous(
+                GroundUpContinuous {
+                    sections: GroundUpNonContinuous { sections: Vec::new() },
+                    biome_array: Box::new([[0; 16]; 16]),
+                }
+            ),
         }
     }
 }

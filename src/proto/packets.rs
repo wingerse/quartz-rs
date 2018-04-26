@@ -9,6 +9,7 @@ use uuid::Uuid;
 use binary::*;
 use nbt::NBT;
 use proto::{data, Error, Result, State};
+use entity::metadata::EntityMetadata;
 use text;
 use text::chat::Chat;
 
@@ -402,7 +403,7 @@ pub enum SPacket {
         yaw: f64,
         pitch: f64,
         current_item: i16,
-        metadata: data::EntityMetadata,
+        metadata: EntityMetadata,
     },
     PlayCollectItem {
         collected_entity_id: i32,
@@ -430,7 +431,7 @@ pub enum SPacket {
         velocity_x: i16,
         velocity_y: i16,
         velocity_z: i16,
-        metadata: data::EntityMetadata,
+        metadata: EntityMetadata,
     },
     PlaySpawnPainting {
         entity_id: i32,
@@ -452,7 +453,6 @@ pub enum SPacket {
         velocity_z: i16,
     },
     PlayDestroyEntities {
-        count: i32,
         entity_ids: Vec<i32>,
     },
     PlayEntity {
@@ -504,7 +504,7 @@ pub enum SPacket {
     },
     PlayEntityMetadata {
         entity_id: i32,
-        metadata: data::EntityMetadata,
+        metadata: EntityMetadata,
     },
     PlayEntityEffect {
         entity_id: i32,
@@ -554,7 +554,7 @@ pub enum SPacket {
     },
     PlayMapChunkBulk {
         sky_light_sent: bool,
-        chunks: Vec<(SPlayMapChunkBulkData, data::GroundUpContinuous)>,
+        chunks: Vec<SPlayMapChunkBulkData>,
     },
     PlayExplosion {
         x: f32,
@@ -944,7 +944,7 @@ impl SPacket {
                 data::write_angle(w, yaw)?;
                 data::write_angle(w, pitch)?;
                 write_ishort(w, current_item)?;
-                metadata.write(w)?;
+                metadata.write_proto(w)?;
             }
             SPacket::PlayCollectItem {
                 collected_entity_id,
@@ -1005,7 +1005,7 @@ impl SPacket {
                 write_ishort(w, velocity_x)?;
                 write_ishort(w, velocity_y)?;
                 write_ishort(w, velocity_z)?;
-                metadata.write(w)?;
+                metadata.write_proto(w)?;
             }
             SPacket::PlaySpawnPainting {
                 entity_id,
@@ -1043,10 +1043,9 @@ impl SPacket {
                 write_ishort(w, velocity_z)?;
             }
             SPacket::PlayDestroyEntities {
-                count,
                 ref entity_ids,
             } => {
-                write_varint(w, count)?;
+                write_varint(w, entity_ids.len() as i32)?;
                 for &entity_id in entity_ids.iter() {
                     write_varint(w, entity_id)?;
                 }
@@ -1140,7 +1139,7 @@ impl SPacket {
                 ref metadata,
             } => {
                 write_varint(w, entity_id)?;
-                metadata.write(w)?;
+                metadata.write_proto(w)?;
             }
             SPacket::PlayEntityEffect {
                 entity_id,
@@ -1255,13 +1254,13 @@ impl SPacket {
             } => {
                 write_bool(w, sky_light_sent)?;
                 write_varint(w, chunks.len() as i32)?;
-                for &(ref x, _) in chunks.iter() {
-                    write_int(w, x.chunk_x)?;
-                    write_int(w, x.chunk_z)?;
-                    write_ushort(w, x.primary_bit_mask)?;
+                for chk in chunks.iter() {
+                    write_int(w, chk.chunk_x)?;
+                    write_int(w, chk.chunk_z)?;
+                    write_ushort(w, chk.primary_bit_mask)?;
                 }
-                for &(_, ref chk) in chunks.iter() {
-                    chk.write(w)?;
+                for chk in chunks.iter() {
+                    chk.chunk.write(w)?;
                 }
             }
             SPacket::PlayExplosion {
@@ -1999,6 +1998,7 @@ pub struct SPlayMapChunkBulkData {
     pub chunk_x: i32,
     pub chunk_z: i32,
     pub primary_bit_mask: u16,
+    pub chunk: data::GroundUpContinuous,
 }
 
 #[derive(Debug)]

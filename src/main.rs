@@ -7,6 +7,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate uuid;
+extern crate flate2;
 
 use std::net::{Ipv4Addr, SocketAddr};
 

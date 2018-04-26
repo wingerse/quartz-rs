@@ -185,6 +185,11 @@ impl NetworkServer {
                     return Ok(());
                 }
 
+                const THRESHOLD: u32 = 256;
+                writer.write_packet(&SPacket::LoginSetCompression { threshold: THRESHOLD as i32 })?;
+                reader.set_compression(THRESHOLD);
+                writer.set_compression(THRESHOLD);
+
                 writer.write_packet(&SPacket::LoginLoginSuccess {
                     username: name.clone(),
                     uuid: uuid.hyphenated().to_string(),
@@ -236,9 +241,13 @@ impl NetworkServer {
                 let packet = receiver.recv();
                 match packet {
                     Ok(p) => {
-                        // TODO: handle normal disconnect here. Connection aborted or reset?
                         if let Err(e) = writer.write_packet(&p) {
                             *connected_s.lock().unwrap() = false;
+                            // normal disconnect
+                            if e.kind() == io::ErrorKind::ConnectionAborted {
+                                break;
+                            }
+
                             return Err(From::from(e))
                         }
                     }

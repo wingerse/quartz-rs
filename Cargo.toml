@@ -11,3 +11,4 @@ serde_derive = "1.0.35"
 quick-error = "1.2.1"
 uuid = {version = "0.6.2", features = ["v3"]}
 base64 = "0.9.0"
+flate2 = "1.0.1"

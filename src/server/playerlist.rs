@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::collections::hash_map::{ValuesMut, Values};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::cell::RefCell;
 
 use uuid::Uuid;
 
 use entity::player::Player;
+use proto::packets::SPacket;
 
 pub struct PlayerList {
     by_uuid: HashMap<Uuid, Player>,
@@ -40,20 +42,22 @@ impl PlayerList {
         self.by_uuid.get_mut(uuid)
     }
 
-    pub fn remove_by_name(&mut self, name: &str) {
+    pub fn remove_by_name(&mut self, name: &str) -> Option<Player> {
         let u = self.by_name.remove(name);
         if let Some(u) = u {
-            let p = self.by_uuid.remove(&u);
-            p.unwrap().set_connected(false);
-        }
+            let mut p = self.by_uuid.remove(&u).unwrap();
+            p.set_connected(false);
+            Some(p)
+        } else { None }
     }
 
-    pub fn remove_by_uuid(&mut self, uuid: &Uuid) {
+    pub fn remove_by_uuid(&mut self, uuid: &Uuid) -> Option<Player> {
         let p = self.by_uuid.remove(uuid);
         if let Some(mut p) = p {
             self.by_name.remove(p.get_name());
             p.set_connected(false);
-        }
+            Some(p)
+        } else { None }
     }
 
     pub fn count(&self) -> usize {

@@ -47,21 +47,41 @@ impl World {
         World { chunks: HashMap::new(), properties: WorldProperties::new(dimension) }
     }
 
-    pub fn get_chunk(&mut self, pos: ChunkPos) -> &mut Chunk {
+    /// gets the chunk from the world, loaded if required, and adds player as who see.
+    pub fn get_chunk(&mut self, pos: ChunkPos, player: Uuid) -> &mut Chunk {
         if !self.chunks.contains_key(&pos) {
             self.load_chunk(pos);
         }
 
-        self.chunks.get_mut(&pos).unwrap()
+        let chunk = self.chunks.get_mut(&pos).unwrap();
+        chunk.insert_player_who_see(player);
+        chunk
     }
 
-    pub fn unload_chunk(&mut self, pos: ChunkPos) {
-        self.chunks.remove(&pos);
+    /// unloads the chunk when it is abandoned. removes player as who see.
+    pub fn unload_chunk_if_required(&mut self, pos: ChunkPos, player: Uuid) {
+        let unload = if let Some(chk) = self.chunks.get_mut(&pos) {
+            chk.remove_player_who_see(&player);
+            if chk.is_abandoned() {
+                true
+            } else {
+                false
+            }
+        } else { false };
+
+        if unload {
+            self.chunks.remove(&pos);
+        }
     }
 
-    pub fn load_chunk(&mut self, pos: ChunkPos) {
+    fn load_chunk(&mut self, pos: ChunkPos) {
+        println!("chunk load");
         let chk = self.properties.load_chunk(pos);
         self.chunks.insert(pos, chk);
+    }
+
+    pub fn get_properties(&self) -> &WorldProperties {
+        &self.properties
     }
 }
 
@@ -92,30 +112,9 @@ impl ChunkRectangle {
         }
     }
 
-    pub fn get_min(&self) -> ChunkPos {
-        self.min
-    }
-
-    pub fn get_max(&self) -> ChunkPos {
-        self.max
-    }
-
     pub fn contains(&self, pos: ChunkPos) -> bool {
         pos.x >= self.min.x && pos.x <= self.max.x &&
-        pos.z >= self.min.z && pos.z <= self.max.z
-    }
-
-    pub fn intersection(&self, other: Self) -> Option<Self> {
-        let min_x = i32::max(self.min.x, other.min.x);
-        let min_z = i32::max(self.min.z, other.min.z);
-        let max_x = i32::min(self.max.x, other.max.x);
-        let max_z = i32::min(self.max.z, other.max.z);
-
-        if min_x > max_x {
-            None
-        } else {
-            Some(ChunkRectangle { min: ChunkPos::new(min_x, min_z), max: ChunkPos::new(max_x, max_z) })
-        }
+            pos.z >= self.min.z && pos.z <= self.max.z
     }
 
     pub fn chunks_iter(&self) -> ChunksIter {

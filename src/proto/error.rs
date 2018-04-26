@@ -33,6 +33,13 @@ quick_error! {
             description("negative packet length")
             display(me) -> ("{}, got {}", me.description(), err)
         }
+        CompressedBeforeThreshold {
+            description("received packet was compressed before threshold size was reached")
+        }
+        NegativeUncompressedLen(err: i32) {
+            description("negative uncompressed length")
+            display(me) -> ("{}, got {}", me.description(), err)
+        }
         InvalidPacketId(err: i32) {
             description("invalid packet id")
             display(me) -> ("{}, got: {}", me.description(), err)

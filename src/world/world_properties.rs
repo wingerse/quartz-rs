@@ -11,6 +11,13 @@ impl WorldProperties {
         WorldProperties { dimension }
     }
 
+    pub fn has_sky_light(&self) -> bool {
+        match self.dimension {
+            Dimension::Overworld => true,
+            _ => false,
+        }
+    }
+
     pub fn load_chunk(&self, pos: ChunkPos) -> Chunk {
         match self.dimension {
             Dimension::Overworld => self.load_overworld(pos),
