@@ -3,12 +3,15 @@ pub mod world_properties;
 
 use std::iter::Filter;
 use std::collections::HashMap;
+use std::io::{self, Read, Write};
 
 use uuid::Uuid;
 
-use self::chunk::{Chunk, ChunkPos};
+use self::chunk::{Chunk, ChunkPos, BlockID};
 use self::world_properties::WorldProperties;
 use math::Vec3;
+use proto;
+use binary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LevelType {
@@ -40,17 +43,36 @@ pub enum Dimension {
 
 pub struct World {
     chunks: HashMap<ChunkPos, Chunk>,
-    spawn_pos: Vec3,
+    spawn_pos: BlockPos,
     properties: WorldProperties,
 }
 
 impl World {
     pub fn new(dimension: Dimension) -> World {
-        World { chunks: HashMap::new(), properties: WorldProperties::new(dimension), spawn_pos: Vec3::ZERO }
+        World { chunks: HashMap::new(), properties: WorldProperties::new(dimension), spawn_pos: BlockPos::ZERO }
     }
 
-    pub fn get_spawn_pos(&self) -> Vec3 {
+    pub fn get_spawn_pos(&self) -> BlockPos {
         self.spawn_pos
+    }
+
+    pub fn get_block(&self, pos: BlockPos) -> Option<BlockID> {
+        self.chunks.get(&ChunkPos::from(pos)).and_then(|c| {
+            let (x, y, z) = pos.to_relative_chunk_pos();
+            Some(c.get_block(x, y, z))
+        })
+    }
+
+    /// Sets the block at given position.
+    /// # Panics
+    /// If the chunk is not loaded, it will panic.
+    pub fn set_block(&mut self, pos: BlockPos, block: BlockID) {
+        if let Some(c) = self.chunks.get_mut(&ChunkPos::from(pos)) {
+            let (x, y, z) = pos.to_relative_chunk_pos();
+            c.set_block(x, y, z, block);
+        } else {
+            panic!("tried setting block at pos ({}) when the chunk is not loaded");
+        }
     }
 
     /// gets the chunk from the world, loaded if required, and adds player as who see.
@@ -60,7 +82,7 @@ impl World {
         }
 
         let chunk = self.chunks.get_mut(&pos).unwrap();
-        chunk.insert_player_who_see(player);
+        chunk.insert_player_in_vicinity(player);
         chunk
     }
 
@@ -69,7 +91,7 @@ impl World {
     pub fn unload_chunk_if_required(&mut self, pos: ChunkPos, player: Uuid) {
         let spawn_rect = ChunkRectangle::centered(self.get_spawn_pos().into(), 10);
         let unload = if let Some(chk) = self.chunks.get_mut(&pos) {
-            chk.remove_player_who_see(&player);
+            chk.remove_player_in_vicinity(&player);
             if chk.is_abandoned() && !spawn_rect.contains(pos) {
                 true
             } else {
@@ -90,6 +112,42 @@ impl World {
 
     pub fn get_properties(&self) -> &WorldProperties {
         &self.properties
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlockPos {
+    pub x: i32,
+    pub y: u8,
+    pub z: i32,
+}
+
+impl BlockPos {
+    pub const ZERO: BlockPos = BlockPos { x: 0, y: 0, z: 0 };
+
+    pub fn new(x: i32, y: u8, z: i32) -> BlockPos {
+        BlockPos { x, y, z }
+    }
+
+    pub fn write_proto<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        let mut val: u64 = (self.z & 0x3ff_ffff) as u64;
+        val |= (self.y as u64 & 0xfff) << 26;
+        val |= (self.x as u64 & 0x3ff_ffff) << 38;
+        binary::write_long(w, val as i64)
+    }
+
+    pub fn read_proto<R: Read>(r: &mut R) -> proto::Result<BlockPos> {
+        let val = binary::read_long(r)?;
+        let x = (val >> 38) as i32;
+        let y = ((val << 26) >> 52) as u8;
+        let z = (val as i32) << 6 >> 6;
+        Ok(BlockPos { x, y, z })
+    }
+
+    pub fn to_relative_chunk_pos(&self) -> (u8, u8, u8) {
+        let x = if self.x < 0 { 16 + self.x % 16 } else { self.x % 16 };
+        let z = if self.z < 0 { 16 + self.z % 16 } else { self.z % 16 };
+        (x as u8, self.y, z as u8)
     }
 }
 

@@ -92,30 +92,6 @@ impl SlotData {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Position {
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
-}
-
-impl Position {
-    pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        let mut val: u64 = (self.z & 0x3ff_ffff) as u64;
-        val |= (self.y as u64 & 0xfff) << 26;
-        val |= (self.x as u64 & 0x3ff_ffff) << 38;
-        binary::write_long(w, val as i64)
-    }
-
-    pub fn read<R: Read>(r: &mut R) -> Result<Position> {
-        let val = binary::read_long(r)?;
-        let x = (val >> 38) as i32;
-        let y = ((val << 26) >> 52) as i32;
-        let z = (val as i32) << 6 >> 6;
-        Ok(Position {x, y, z})
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
 pub struct ModifierData {
     pub uuid: uuid::Uuid,
     pub amount: f64,

@@ -12,6 +12,7 @@ use proto::{data, Error, Result, State};
 use entity::metadata::EntityMetadata;
 use text;
 use text::chat::Chat;
+use world::BlockPos;
 
 #[derive(Debug)]
 pub enum CPacket {
@@ -55,11 +56,11 @@ pub enum CPacket {
     },
     PlayPlayerDigging {
         status: i8,
-        location: data::Position,
+        location: BlockPos,
         face: i8,
     },
     PlayPlayerBlockPlacement {
-        location: data::Position,
+        location: BlockPos,
         face: i8,
         held_item: data::SlotData,
         cursor_pos_x: i8,
@@ -105,7 +106,7 @@ pub enum CPacket {
         enchantment: i8,
     },
     PlayUpdateSign {
-        location: data::Position,
+        location: BlockPos,
         line1: Chat,
         line2: Chat,
         line3: Chat,
@@ -118,7 +119,7 @@ pub enum CPacket {
     },
     PlayTabComplete {
         text: String,
-        pos: Option<data::Position>,
+        pos: Option<BlockPos>,
     },
     PlayClientSettings {
         locale: String,
@@ -205,11 +206,11 @@ impl CPacket {
                     }),
                     7 => Ok(CPacket::PlayPlayerDigging {
                             status: read_byte(r)?,
-                            location: data::Position::read(r)?,
+                            location: BlockPos::read_proto(r)?,
                             face: read_byte(r)?,
                     }),
                     8 => Ok(CPacket::PlayPlayerBlockPlacement {
-                            location: data::Position::read(r)?,
+                            location: BlockPos::read_proto(r)?,
                             face: read_byte(r)?,
                             held_item: data::SlotData::read(r)?,
                             cursor_pos_x: read_byte(r)?,
@@ -255,7 +256,7 @@ impl CPacket {
                         enchantment: read_byte(r)?,
                     }),
                     18 => Ok(CPacket::PlayUpdateSign {
-                        location: data::Position::read(r)?,
+                        location: BlockPos::read_proto(r)?,
                         line1: Chat::read_proto(r)?,
                         line2: Chat::read_proto(r)?,
                         line3: Chat::read_proto(r)?,
@@ -271,7 +272,7 @@ impl CPacket {
                         pos: {
                             let has = read_bool(r)?;
                             if has {
-                                Some(data::Position::read(r)?)
+                                Some(BlockPos::read_proto(r)?)
                             } else {
                                 None
                             }
@@ -362,7 +363,7 @@ pub enum SPacket {
         item: data::SlotData,
     },
     PlaySpawnPosition {
-        location: data::Position,
+        location: BlockPos,
     },
     PlayUpdateHealth {
         health: f32,
@@ -388,7 +389,7 @@ pub enum SPacket {
     },
     PlayUseBed {
         entity_id: i32,
-        location: data::Position,
+        location: BlockPos,
     },
     PlayAnimation {
         entity_id: i32,
@@ -436,7 +437,7 @@ pub enum SPacket {
     PlaySpawnPainting {
         entity_id: i32,
         title: String,
-        location: data::Position,
+        location: BlockPos,
         direction: u8,
     },
     PlaySpawnExperienceOrb {
@@ -538,18 +539,18 @@ pub enum SPacket {
         data: Vec<SPlayMultiBlockChangeData>,
     },
     PlayBlockChange {
-        location: data::Position,
+        location: BlockPos,
         block_id: i32,
     },
     PlayBlockAction {
-        location: data::Position,
+        location: BlockPos,
         byte1: u8,
         byte2: u8,
         block_type: i32,
     },
     PlayBlockBreakAnimation {
         entity_id: i32,
-        location: data::Position,
+        location: BlockPos,
         destroy_stage: i8,
     },
     PlayMapChunkBulk {
@@ -568,7 +569,7 @@ pub enum SPacket {
     },
     PlayEffect {
         effect_id: i32,
-        location: data::Position,
+        location: BlockPos,
         data: i32,
         disable_relative_volume: bool,
     },
@@ -634,7 +635,7 @@ pub enum SPacket {
         accepted: bool,
     },
     PlayUpdateSign {
-        location: data::Position,
+        location: BlockPos,
         line1: Chat,
         line2: Chat,
         line3: Chat,
@@ -647,12 +648,12 @@ pub enum SPacket {
         data: Option<SPlayMapData>,
     },
     PlayUpdateBlockEntity {
-        location: data::Position,
+        location: BlockPos,
         action: u8,
         nbt_data: NBT,
     },
     PlayOpenSignEditor {
-        location: data::Position,
+        location: BlockPos,
     },
     PlayStatistics {
         statistics: Vec<(&'static str, i32)>,
@@ -871,7 +872,7 @@ impl SPacket {
                 item.write(w)?;
             }
             SPacket::PlaySpawnPosition { location } => {
-                location.write(w)?;
+                location.write_proto(w)?;
             }
             SPacket::PlayUpdateHealth {
                 health,
@@ -916,7 +917,7 @@ impl SPacket {
                 location,
             } => {
                 write_varint(w, entity_id)?;
-                location.write(w)?;
+                location.write_proto(w)?;
             }
             SPacket::PlayAnimation {
                 entity_id,
@@ -1015,7 +1016,7 @@ impl SPacket {
             } => {
                 write_varint(w, entity_id)?;
                 data::write_string(w, title)?;
-                location.write(w)?;
+                location.write_proto(w)?;
                 write_ubyte(w, direction)?;
             }
             SPacket::PlaySpawnExperienceOrb {
@@ -1225,7 +1226,7 @@ impl SPacket {
                 }
             }
             SPacket::PlayBlockChange { location, block_id } => {
-                location.write(w)?;
+                location.write_proto(w)?;
                 write_varint(w, block_id)?;
             }
             SPacket::PlayBlockAction {
@@ -1234,7 +1235,7 @@ impl SPacket {
                 byte2,
                 block_type,
             } => {
-                location.write(w)?;
+                location.write_proto(w)?;
                 write_ubyte(w, byte1)?;
                 write_ubyte(w, byte2)?;
                 write_varint(w, block_type)?;
@@ -1245,7 +1246,7 @@ impl SPacket {
                 destroy_stage,
             } => {
                 write_varint(w, entity_id)?;
-                location.write(w)?;
+                location.write_proto(w)?;
                 write_byte(w, destroy_stage)?;
             }
             SPacket::PlayMapChunkBulk {
@@ -1294,7 +1295,7 @@ impl SPacket {
                 disable_relative_volume,
             } => {
                 write_int(w, effect_id)?;
-                location.write(w)?;
+                location.write_proto(w)?;
                 write_int(w, data)?;
                 write_bool(w, disable_relative_volume)?;
             }
@@ -1419,7 +1420,7 @@ impl SPacket {
                 ref line3,
                 ref line4,
             } => {
-                location.write(w)?;
+                location.write_proto(w)?;
                 line1.write_proto(w)?;
                 line2.write_proto(w)?;
                 line3.write_proto(w)?;
@@ -1456,12 +1457,12 @@ impl SPacket {
                 action,
                 ref nbt_data,
             } => {
-                location.write(w)?;
+                location.write_proto(w)?;
                 write_ubyte(w, action)?;
                 nbt_data.write(w)?;
             }
             SPacket::PlayOpenSignEditor { location } => {
-                location.write(w)?;
+                location.write_proto(w)?;
             }
             SPacket::PlayStatistics { ref statistics } => {
                 write_varint(w, statistics.len() as i32)?;

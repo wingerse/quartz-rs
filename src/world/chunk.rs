@@ -6,6 +6,7 @@ use collections::{NibbleArray, VarbitArray};
 use proto::data::{self, GroundUpContinuous, GroundUpNonContinuous};
 use proto::packets::{SPacket, SPlayChunkDataData, SPlayMapChunkBulkData};
 use math::Vec3;
+use world::BlockPos;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockID {
@@ -31,7 +32,7 @@ impl BlockID {
 
     pub fn set_meta(&mut self, meta: u8) { self.meta = meta & 0x0f; }
 
-    pub fn as_u16(&self) -> u16 { ((self.typ as u16) << 4) | self.meta as u16 }
+    pub fn to_u16(&self) -> u16 { ((self.typ as u16) << 4) | self.meta as u16 }
 }
 
 pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
@@ -131,7 +132,7 @@ impl ChunkSection {
             for z in 0..16 {
                 for x in 0..16 {
                     let b = self.get_block(x, y, z);
-                    let short = b.as_u16();
+                    let short = b.to_u16();
                     // little endian
                     blocks[blocks_index] = short as u8;
                     blocks[blocks_index + 1] = (short >> 8) as u8;
@@ -175,6 +176,10 @@ impl From<Vec3> for ChunkPos {
     fn from(pos: Vec3) -> Self { ChunkPos::new((pos.x / 16.0).floor() as i32, (pos.z / 16.0).floor() as i32) }
 }
 
+impl From<BlockPos> for ChunkPos {
+    fn from(pos: BlockPos) -> Self { ChunkPos::new((pos.x as f64 / 16.0).floor() as i32, (pos.z as f64 / 16.0).floor() as i32) }
+}
+
 #[derive(Debug)]
 pub struct Chunk {
     pos: ChunkPos,
@@ -182,7 +187,7 @@ pub struct Chunk {
     /// biomes as zx
     biomes: [[u8; 16]; 16],
     has_sky_light: bool,
-    players_who_see_this: HashSet<Uuid>,
+    players_in_vicinity: HashSet<Uuid>,
     players: HashSet<Uuid>,
 }
 
@@ -193,7 +198,7 @@ impl Chunk {
             sections: Default::default(),
             biomes: [[0; 16]; 16],
             has_sky_light,
-            players_who_see_this: HashSet::new(),
+            players_in_vicinity: HashSet::new(),
             players: HashSet::new()
         }
     }
@@ -204,7 +209,7 @@ impl Chunk {
 
     /// returns true when there is no player who see this chunk.
     pub fn is_abandoned(&self) -> bool {
-        self.players_who_see_this.len() == 0
+        self.players_in_vicinity.len() == 0
     }
 
     fn get_section(&self, y: u8) -> &Option<Box<ChunkSection>> {
@@ -227,12 +232,16 @@ impl Chunk {
         self.players.iter()
     }
 
-    pub fn insert_player_who_see(&mut self, p: Uuid) {
-        self.players_who_see_this.insert(p);
+    pub fn insert_player_in_vicinity(&mut self, p: Uuid) {
+        self.players_in_vicinity.insert(p);
     }
 
-    pub fn remove_player_who_see(&mut self, p: &Uuid) {
-        self.players_who_see_this.remove(p);
+    pub fn remove_player_in_vicinity(&mut self, p: &Uuid) {
+        self.players_in_vicinity.remove(p);
+    }
+
+    pub fn players_in_vicinity_iter(&self) -> impl Iterator<Item=&Uuid> {
+        self.players_in_vicinity.iter()
     }
 
     pub fn get_block(&self, x: u8, y: u8, z: u8) -> BlockID {

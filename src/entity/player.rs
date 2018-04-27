@@ -8,14 +8,15 @@ use uuid::Uuid;
 
 use proto::packets::{CPacket, SPacket, SPlayPlayerListItemDataAction, SPlayPlayerListItemData};
 use math::Vec3;
-use world::chunk::{ChunkPos, Chunk};
-use world::{World, Dimension, ChunkRectangle, LevelType};
+use world::chunk::{ChunkPos, Chunk, BlockID};
+use world::{World, Dimension, ChunkRectangle, LevelType, BlockPos};
 use entity::metadata::{EntityMetadata, MetadataEntry};
 use server::{ServerContext, ServerInfo, Gamemode, Difficulty, TICKS_PER_SEC};
 use server::playerlist::PlayerList;
 use text::{self, ChatPos, Code};
 use text::chat::Chat;
 use binary::double_to_fixed_point;
+use proto::data::SlotData;
 use util;
 
 #[derive(Debug)]
@@ -71,7 +72,7 @@ impl Player {
             pitch: 0.0,
             on_ground: true,
 
-            dimension: Dimension::End,
+            dimension: Dimension::Overworld,
             gamemode: Gamemode::Creative,
             entity_id: 0,
             players_in_vicinity: HashSet::new(),
@@ -132,6 +133,21 @@ impl Player {
     fn send_packet_to_all_players(&mut self, ctx: &ServerContext, packet: Arc<SPacket>) {
         self.send_packet(Arc::clone(&packet));
         ctx.player_list.send_packet_to_players_except(self.uuid, Arc::clone(&packet));
+    }
+
+    fn send_packet_to_vicinity(&self, ctx: &ServerContext, packet: Arc<SPacket>) {
+        for &p in &self.players_in_vicinity {
+            ctx.player_list.send_packet_to_player(p, Arc::clone(&packet));
+        }
+    }
+
+    fn send_packet_to_chunk_vicinity(&self, chunk_pos: ChunkPos, ctx: &mut ServerContext, packet: Arc<SPacket>) {
+        let chunk = ctx.world.get_chunk(chunk_pos, self.uuid);
+        for &p in chunk.players_in_vicinity_iter() {
+            if p != self.uuid {
+                ctx.player_list.send_packet_to_player(p, Arc::clone(&packet));
+            }
+        }
     }
 
     pub fn get_pos(&self) -> Vec3 {
@@ -222,7 +238,7 @@ impl Player {
         self.send_packet(Arc::new(SPacket::PlayPlayerAbilities {
             flags: 0x08 | 0x04,
             flying_speed: 0.05,
-            field_of_view_modifier: 0.5,
+            field_of_view_modifier: 1.0,
         }));
 
         self.send_packet(Arc::new(SPacket::PlayPlayerListHeaderAndFooter {
@@ -276,7 +292,7 @@ impl Player {
         ctx.world.get_chunk(self.get_chunk_pos(), self.uuid).insert_player(self.uuid);
 
         self.send_packet(Arc::new(SPacket::PlaySpawnPosition {
-            location: ::proto::data::Position { x: 0, y: 82, z: 0 },
+            location: BlockPos::new(0, 80, 0),
         }));
         let (x, y, z, yaw, pitch) = (self.pos.x, self.pos.y, self.pos.z, self.yaw, self.pitch);
         self.send_packet(Arc::new(SPacket::PlayPlayerPositionAndLook {
@@ -297,7 +313,7 @@ impl Player {
 
         util::iter_foreach_every(chunk_rect.chunks_iter()
                                            .map(|pos| ctx.world.get_chunk(pos, uuid).to_proto_map_chunk_bulk_data()),
-                                 |i| i % 30 == 0 && i != 0,
+                                 |i| i % 8 == 0 && i != 0,
                                  |q| {
                                      let mut chunks = Vec::new();
                                      while let Some(chunk) = q.pop_front() {
@@ -369,7 +385,7 @@ impl Player {
                 util::iter_foreach_every(new_chunk_rect.subtract_iter(prev_chunk_rect).map(|pos| {
                     ctx.world.get_chunk(pos, uuid).to_proto_map_chunk_bulk_data()
                 }),
-                                         |i| i % 30 == 0 && i != 0,
+                                         |i| i % 8 == 0 && i != 0,
                                          |q| {
                                              let mut chunks = Vec::new();
                                              while let Some(chunk) = q.pop_front() {
@@ -471,7 +487,7 @@ impl Player {
                             message,
                         }));
                     }
-                    CPacket::PlayUseEntity { target, data } => {}
+                    // CPacket::PlayUseEntity { target, data } => {}
                     CPacket::PlayPlayer { on_ground } => {
                         let (x, y, z, yaw, pitch, on_ground) = (self.pos.x, self.pos.y, self.pos.z, self.yaw, self.pitch, on_ground);
                         self.handle_motion_recv(x, y, z, yaw, pitch, on_ground,
@@ -496,10 +512,45 @@ impl Player {
                                                 true, true,
                                                 ctx);
                     }
-                    CPacket::PlayPlayerDigging { status, location, face } => {}
-                    CPacket::PlayPlayerBlockPlacement { location, face, held_item, cursor_pos_x, cursor_pos_y, cursor_pos_z } => {}
-                    CPacket::PlayHeldItemChange { slot } => {}
-                    CPacket::PlayAnimation {} => {}
+                    CPacket::PlayPlayerDigging { status, location, face } => {
+                        match status {
+                            0 => {
+                                if self.gamemode == Gamemode::Creative {
+                                    ctx.world.set_block(location, BlockID::AIR);
+                                    let chunk_pos = ChunkPos::from(location);
+                                    let packet = Arc::new(SPacket::PlayBlockChange {
+                                        location,
+                                        block_id: BlockID::AIR.to_u16() as i32,
+                                    });
+                                    self.send_packet_to_chunk_vicinity(chunk_pos, ctx, packet);
+                                }
+                            },
+                            _ => (),
+                        }
+                    }
+                    CPacket::PlayPlayerBlockPlacement { location, face, held_item, cursor_pos_x, cursor_pos_y, cursor_pos_z } => {
+                        if self.gamemode == Gamemode::Creative {
+                            if let SlotData::Some{block_id, item_damage, ..} = held_item {
+                                let block = BlockID::new(block_id as u8, item_damage as u8);
+
+                                ctx.world.set_block(location, block);
+
+                                let chunk_pos = ChunkPos::from(location);
+                                let packet = Arc::new(SPacket::PlayBlockChange {
+                                    location,
+                                    block_id: block.to_u16() as i32,
+                                });
+                                self.send_packet_to_chunk_vicinity(chunk_pos, ctx, packet);
+                            }
+                        }
+                    }
+                    /*CPacket::PlayHeldItemChange { slot } => {}*/
+                    CPacket::PlayAnimation {} => {
+                        self.send_packet_to_vicinity(ctx, Arc::new(SPacket::PlayAnimation {
+                            entity_id: self.entity_id,
+                            animation: 0,
+                        }));
+                    }
                     CPacket::PlayEntityAction { entity_id, action_id, action_param } => {
                         match action_id {
                             0 => {
@@ -529,7 +580,7 @@ impl Player {
                             _ => (),
                         }
                     }
-                    CPacket::PlaySteerVehicle { sideways, forward, flags } => {}
+                    /*CPacket::PlaySteerVehicle { sideways, forward, flags } => {}
                     CPacket::PlayCloseWindow { window_id } => {}
                     CPacket::PlayClickWindow { window_id, slot, button, action_num, mode, clicked_item } => {}
                     CPacket::PlayConfirmTransaction { window_id, action_num, accepted } => {}
@@ -542,8 +593,8 @@ impl Player {
                     CPacket::PlayClientStatus { action_id } => {}
                     CPacket::PlayPluginMessage { channel, data } => {}
                     CPacket::PlaySpectate { target_player } => {}
-                    CPacket::PlayResourcePackStatus { hash, result } => {}
-                    _ => unreachable!(),
+                    CPacket::PlayResourcePackStatus { hash, result } => {}*/
+                    x @ _ => println!("{:?}", x),
                 }
                 Err(_) => break,
             }
