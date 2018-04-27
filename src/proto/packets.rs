@@ -460,9 +460,9 @@ pub enum SPacket {
     },
     PlayEntityRelativeMove {
         entity_id: i32,
-        delta_x: f64,
-        delta_y: f64,
-        delta_z: f64,
+        delta_x: i8,
+        delta_y: i8,
+        delta_z: i8,
         on_ground: bool,
     },
     PlayEntityLook {
@@ -473,9 +473,9 @@ pub enum SPacket {
     },
     PlayEntityLookAndRelativeMove {
         entity_id: i32,
-        delta_x: f64,
-        delta_y: f64,
-        delta_z: f64,
+        delta_x: i8,
+        delta_y: i8,
+        delta_z: i8,
         yaw: f64,
         pitch: f64,
         on_ground: bool,
@@ -1061,9 +1061,9 @@ impl SPacket {
                 on_ground,
             } => {
                 write_varint(w, entity_id)?;
-                write_byte(w, double_to_fixed_point(delta_x) as i8)?;
-                write_byte(w, double_to_fixed_point(delta_y) as i8)?;
-                write_byte(w, double_to_fixed_point(delta_z) as i8)?;
+                write_byte(w, delta_x)?;
+                write_byte(w, delta_y)?;
+                write_byte(w, delta_z)?;
                 write_bool(w, on_ground)?;
             }
             SPacket::PlayEntityLook {
@@ -1087,9 +1087,9 @@ impl SPacket {
                 on_ground,
             } => {
                 write_varint(w, entity_id)?;
-                write_byte(w, double_to_fixed_point(delta_x) as i8)?;
-                write_byte(w, double_to_fixed_point(delta_y) as i8)?;
-                write_byte(w, double_to_fixed_point(delta_z) as i8)?;
+                write_byte(w, delta_x)?;
+                write_byte(w, delta_y)?;
+                write_byte(w, delta_z)?;
                 data::write_angle(w, yaw)?;
                 data::write_angle(w, pitch)?;
                 write_bool(w, on_ground)?;

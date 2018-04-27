@@ -36,7 +36,7 @@ pub fn read_uuid<R: Read>(r: &mut R) -> io::Result<uuid::Uuid> {
 }
 
 pub fn write_angle<W: Write>(w: &mut W, a: f64) -> io::Result<()> {
-    binary::write_byte(w, ((f64::from(a.round() as i32 % 360) / 360.0) * 256.0) as i8)
+    binary::write_byte(w, ((f64::from(a.round() as i32 % 360) / 360.0) * 256.0).floor() as i8)
 }
 
 pub fn read_angle<R: Read>(r: &mut R) -> io::Result<f64> {

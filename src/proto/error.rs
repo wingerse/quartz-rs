@@ -3,70 +3,55 @@ use nbt;
 use std::error::Error as StdError;
 use std::io;
 use std::string::FromUtf8Error;
-use super::MAX_PACKET_LEN;
+use proto::MAX_PACKET_LEN;
 use text::chat;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum Error {
-        IOError(err: io::Error) {
-            description(err.description())
-            display("io error: {}", err)
-            from()
-            cause(err)
-        }
-        PacketTooLarge(err: usize) {
-            description("packet too large")
-            display(me) -> ("{}, got {} bytes left", me.description(), err)
-        }
-        PacketSizeExceededMaxAllowed(err: i32) {
-            description("packet size exceeded maximum allowed")
-            display(me) -> ("{}: {}, got {}", me.description(), MAX_PACKET_LEN, err)
-        }
-        UnexpectedPacket {expected: &'static str, got: String} {
-            description("unexpected packet")
-            display(me) -> ("{}: expected: {}, got: {}", me.description(), expected, got)
-        }
-        NegativePacketLen(err: i32) {
-            description("negative packet length")
-            display(me) -> ("{}, got {}", me.description(), err)
-        }
-        CompressedBeforeThreshold {
-            description("received packet was compressed before threshold size was reached")
-        }
-        NegativeUncompressedLen(err: i32) {
-            description("negative uncompressed length")
-            display(me) -> ("{}, got {}", me.description(), err)
-        }
-        InvalidPacketId(err: i32) {
-            description("invalid packet id")
-            display(me) -> ("{}, got: {}", me.description(), err)
-        }
-        NBTError(err: nbt::Error) {
-            description(err.description())
-            display("nbt error: {}", err)
-            from()
-            cause(err)
-        }
-        InvalidUtf8String(err: FromUtf8Error) {
-            description(err.description())
-            display("invalid utf8 string error: {}", err)
-            from()
-            cause(err)
-        }
-        ChatError(err: chat::Error) {
-            description(err.description())
-            display("chat error: {}", err)
-            from()
-            cause(err)
-        }
-        VarintError(err: binary::VarintError) {
-            description(err.description())
-            display("varint error: {}", err)
-            from()
-            cause(err)
-        }
-    }
+#[derive(Fail, Debug)]
+pub enum Error {
+    #[fail(display = "io error: {}", _0)]
+    IOError(#[cause] io::Error),
+    #[fail(display = "packet too large, got {} bytes left", _0)]
+    PacketTooLarge(usize),
+    #[fail(display = "packet size exceeded maximum allowed:, 2097152, got {}", _0)]
+    PacketSizeExceededMaxAllowed(i32),
+    #[fail(display = "unexpected packet. expected: {}, got: {}", expected, got)]
+    UnexpectedPacket {expected: &'static str, got: String},
+    #[fail(display = "negative packet length, got {}", _0)]
+    NegativePacketLen(i32),
+    #[fail(display = "received packet was compressed before threshold size was reached")]
+    CompressedBeforeThreshold,
+    #[fail(display = "negative uncompressed length, got {}", _0)]
+    NegativeUncompressedLen(i32),
+    #[fail(display = "invalid packet id, got {}", _0)]
+    InvalidPacketId(i32),
+    #[fail(display = "nbt error: {}", _0)]
+    NBTError(#[cause] nbt::Error),
+    #[fail(display = "invalid utf8 string error: {}", _0)]
+    InvalidUtf8String(#[cause] FromUtf8Error),
+    #[fail(display = "chat error: {}", _0)]
+    ChatError(#[cause] chat::Error),
+    #[fail(display = "varint error: {}", _0)]
+    VarintError(#[cause] binary::VarintError),
+}
+
+impl From<io::Error> for Error {
+    fn from(x: io::Error) -> Self { Error::IOError(x) }
+}
+
+impl From<nbt::Error> for Error {
+    fn from(x: nbt::Error) -> Self { Error::NBTError(x) }
+}
+
+impl From<FromUtf8Error> for Error {
+    fn from(x: FromUtf8Error) -> Self { Error::InvalidUtf8String(x) }
+}
+
+impl From<chat::Error> for Error {
+    fn from(x: chat::Error) -> Self { Error::ChatError(x) }
+}
+
+impl From<binary::VarintError> for Error {
+    fn from(x: binary::VarintError) -> Self { Error::VarintError(x) }
 }

@@ -8,8 +8,9 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate uuid;
 extern crate flate2;
-
-use std::net::{Ipv4Addr, SocketAddr};
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 
 mod nbt;
 mod binary;
@@ -24,6 +25,8 @@ mod math;
 mod inventory;
 mod util;
 
+use std::net::{Ipv4Addr, SocketAddr};
+
 fn main() {
     let mut s = match server::Server::new(SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 25565)) {
         Ok(s) => s,
@@ -34,22 +37,3 @@ fn main() {
         panic!("error starting server: {}", e);
     }
 }
-
-// join game
-// plugin message
-// server difficulty
-// spawn position
-// player abilities
-// held item change
-// statistics
-// player list item x 2
-// player position and look
-// world border
-// time update
-// window items
-// set slot
-// map chunk bulk
-// entity metadata
-// update health
-// set experience
-// 

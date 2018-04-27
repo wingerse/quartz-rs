@@ -75,22 +75,20 @@ impl PacketList {
     }
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum Error {
-        IOError(err: io::Error) {
-            description(err.description())
-            display("io error: {}", err)
-            from()
-            cause(err)
-        }
-        NetworkError(err: network::Error) {
-            description(err.description())
-            display("network error: {}", err)
-            from()
-            cause(err)
-        }
-    }
+#[derive(Fail, Debug)]
+pub enum Error {
+    #[fail(display = "io error: {}", _0)]
+    IOError(#[cause] io::Error),
+    #[fail(display = "network error: {}", _0)]
+    NetworkError(#[cause] network::Error),
+}
+
+impl From<io::Error> for Error {
+    fn from(x: io::Error) -> Self { Error::IOError(x) }
+}
+
+impl From<network::Error> for Error {
+    fn from(x: network::Error) -> Self { Error::NetworkError(x) }
 }
 
 pub const MS_PER_TICK: u64 = 50;

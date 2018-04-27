@@ -212,23 +212,14 @@ impl<'de> Deserialize<'de> for Chat {
     }
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum Error {
-        IOError(err: io::Error) {
-            description(err.description())
-            display("io error: {}", err)
-            cause(err)
-            from()
-        }
-        JSONError(err: serde_json::Error) {
-            description(err.description())
-            display("json error: {}", err)
-            cause(err)
-            from()
-        }
-    }
+#[derive(Fail, Debug)]
+pub enum Error {
+    #[fail(display = "json error: {}", _0)]
+    JSONError(#[cause] serde_json::Error),
+}
 
+impl From<serde_json::Error> for Error {
+    fn from(x: serde_json::Error) -> Self { Error::JSONError(x) }
 }
 
 impl Chat {

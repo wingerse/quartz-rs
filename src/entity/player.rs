@@ -14,6 +14,7 @@ use entity::metadata::{EntityMetadata, MetadataEntry};
 use server::{PacketList, ServerInfo, Gamemode};
 use text::{self, ChatPos};
 use text::chat::Chat;
+use binary::double_to_fixed_point;
 use util;
 
 #[derive(Debug)]
@@ -214,7 +215,11 @@ impl Player {
                           moved: bool, rotated: bool,
                           server_info: &ServerInfo, world: &mut World,
                           packet_list: &mut PacketList) {
-        let (delta_x, delta_y, delta_z) = (x - self.pos.x, y - self.pos.y, z - self.pos.z);
+        let (prev_fp_x, prev_fp_y, prev_fp_z) = (double_to_fixed_point(self.pos.x), double_to_fixed_point(self.pos.y), double_to_fixed_point(self.pos.z));
+        let (fp_x, fp_y, fp_z) = (double_to_fixed_point(x), double_to_fixed_point(y), double_to_fixed_point(z));
+        let (delta_fp_x, delta_fp_y, delta_fp_z) = (fp_x - prev_fp_x, fp_y - prev_fp_y, fp_z - prev_fp_z);
+
+        fn fp_fits_byte(fp: i32) -> bool { fp >= -128 && fp <= 127 }
 
         if rotated {
             self.yaw = yaw;
@@ -260,13 +265,13 @@ impl Player {
 
         let mut packets = Vec::new();
 
-        if moved && delta_x.abs() < 4.0 && delta_y.abs() < 4.0 && delta_z.abs() < 4.0 {
+        if moved && fp_fits_byte(delta_fp_x) && fp_fits_byte(delta_fp_y) && fp_fits_byte(delta_fp_z) {
             if rotated {
                 packets.push(Arc::new(SPacket::PlayEntityLookAndRelativeMove {
                     entity_id: self.entity_id,
-                    delta_x,
-                    delta_y,
-                    delta_z,
+                    delta_x: delta_fp_x as i8,
+                    delta_y: delta_fp_y as i8,
+                    delta_z: delta_fp_z as i8,
                     yaw: self.yaw,
                     pitch: self.pitch,
                     on_ground: self.on_ground,
@@ -278,9 +283,9 @@ impl Player {
             } else {
                 packets.push(Arc::new(SPacket::PlayEntityRelativeMove {
                     entity_id: self.entity_id,
-                    delta_x,
-                    delta_y,
-                    delta_z,
+                    delta_x: delta_fp_x as i8,
+                    delta_y: delta_fp_y as i8,
+                    delta_z: delta_fp_z as i8,
                     on_ground: self.on_ground,
                 }));
             }

@@ -74,20 +74,16 @@ pub fn read_double<R: Read>(r: &mut R) -> io::Result<f64> {
     r.read_f64::<BigEndian>()
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum VarintError {
-        TooLarge {
-            description("varint or varlong too large")
-        }
-        IOErr(err: io::Error) {
-            description(err.description())
-            display("io error: {}", err)
-            from()
-            cause(err)
-        }
-    }
+#[derive(Debug, Fail)]
+pub enum VarintError {
+    #[fail(display = "varint or varlong too large")]
+    TooLarge,
+    #[fail(display = "io error: {}", _0)]
+    IOErr(#[cause] io::Error),
+}
 
+impl From<io::Error> for VarintError {
+    fn from(x: io::Error) -> Self { VarintError::IOErr(x) }
 }
 
 pub fn write_varint<W: Write>(w: &mut W, x: i32) -> io::Result<()> {
@@ -167,7 +163,7 @@ pub fn read_varlong<R: BufRead>(r: &mut R) -> Result<i64, VarintError> {
 }
 
 pub fn double_to_fixed_point(f: f64) -> i32 {
-    (f * f64::from(1 << 5)) as i32
+    (f * f64::from(1 << 5)).floor() as i32
 }
 
 pub fn fixed_point_to_double(i: i32) -> f64 {

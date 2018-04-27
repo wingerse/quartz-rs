@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::error::Error as StdError;
 
 use uuid::{self, Uuid};
+use failure::Fail;
 
 use proto::{self, Reader, State, Writer};
 use proto::packets::*;
@@ -17,16 +18,14 @@ use text::chat::{Chat, Component, StringComponent};
 use entity::player::Player;
 use proto::packets::SStatusResponsePlayer;
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum Error {
-        IOError(err: io::Error) {
-            description(err.description())
-            display("io error: {}", err)
-            cause(err)
-            from()
-        }
-    }
+#[derive(Fail, Debug)]
+pub enum Error {
+    #[fail(display = "io error: {}", _0)]
+    IOError(#[cause] io::Error),
+}
+
+impl From<io::Error> for Error {
+    fn from(x: io::Error) -> Self { Error::IOError(x) }
 }
 
 pub struct NetworkServer {
@@ -271,10 +270,8 @@ impl NetworkServer {
                 Err(e) => {
                     *connected.lock().unwrap() = false;
                     // normal disconnect
-                    // TODO: make this better. need to check if cause is an io error and that it's kind() is unexpectedeof
-                    // but I can't downcast cause(), too bad.
-                    if let Some(cause) = e.cause() {
-                        if cause.description() == "failed to fill whole buffer" {
+                    if let Some(ioerr) = e.root_cause().downcast_ref::<io::Error>() {
+                        if ioerr.kind() == io::ErrorKind::UnexpectedEof {
                             break;
                         }
                     }

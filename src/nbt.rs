@@ -1,8 +1,35 @@
-use binary;
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::io::{self, Read, Write};
 use std::string::FromUtf8Error;
+
+use binary;
+
+#[derive(Debug, Fail)]
+pub enum Error {
+    #[fail(display = "byte array with negative length: {}", _0)]
+    ByteArrayNegativeLength(i32),
+    #[fail(display = "invalid utf8 string: {}", _0)]
+    InvalidUtf8String(#[cause] FromUtf8Error),
+    #[fail(display = "max nest level allowed reached: {}", _0)]
+    MaxNestLevelReached(u32),
+    #[fail(display = "int array with negative length: {}", _0)]
+    IntArrayNegativeLength(i32),
+    #[fail(display = "tag with invalid ID: {}", _0)]
+    InvalidID(u8),
+    #[fail(display = "root tag is not a compound, got: {}", _0)]
+    NotACompoundID(u8),
+    #[fail(display = "io error: {}", _0)]
+    IOErr(#[cause] io::Error),
+}
+
+impl From<FromUtf8Error> for Error {
+    fn from(x: FromUtf8Error) -> Self { Error::InvalidUtf8String(x) }
+}
+
+impl From<io::Error> for Error {
+    fn from(x: io::Error) -> Self { Error::IOErr(x) }
+}
 
 fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
     binary::write_ushort(w, s.len() as u16)?;
@@ -18,44 +45,6 @@ fn read_string<R: Read>(r: &mut R) -> Result<String, Error> {
 }
 
 const MAX_NEXT_LEVEL: u32 = 512;
-
-quick_error! {
-    #[derive(Debug)]
-    pub enum Error {
-        ByteArrayNegativeLength(err: i32) {
-            description("byte array with negative length")
-            display(me) -> ("{}: {}", me.description(), err)
-        }
-        InvalidUtf8String(err: FromUtf8Error) {
-            description(err.description())
-            display("invalid utf8 string: {}", err)
-            from()
-            cause(err)
-        }
-        MaxNestLevelReached(err: u32) {
-            description("max nest level allowed reached")
-            display(me) -> ("{}: {}", me.description(), err)
-        }
-        IntArrayNegativeLength(err: i32) {
-            description("int array with negative length")
-            display(me) -> ("{}: {}", me.description(), err)
-        }
-        InvalidID(err: u8) {
-            description("tag with invalid ID")
-            display(me) -> ("{}: {}", me.description(), err)
-        }
-        NotACompoundID(err: u8) {
-            description("root tag is not a compound")
-            display(me) -> ("{}, got: {}", me.description(), err)
-        }
-        IOErr(err: io::Error) {
-            description(err.description())
-            display("io error: {}", err)
-            from()
-            cause(err)
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum Tag {
