@@ -16,7 +16,7 @@ use base64;
 use uuid::Uuid;
 
 use network::{self, NetworkServer};
-use entity::player::{Player, PlayerInfo};
+use entity::player::Player;
 use proto::packets::{SPacket, SPlayPlayerListItemData, SPlayPlayerListItemDataAction};
 use world::{Dimension, LevelType, World};
 use world::chunk::{ChunkPos, Chunk};
@@ -41,40 +41,6 @@ pub enum Difficulty {
     Hard,
 }
 
-#[derive(Default)]
-pub struct PacketList {
-    /// this is sent to all players
-    to_all_players: VecDeque<Arc<SPacket>>,
-    /// a list of entries where every entry is a list of packets and a player to not send these to.
-    to_all_player_except: HashMap<Uuid, VecDeque<Arc<SPacket>>>,
-    /// packets are only sent to players specified.
-    to_players: HashMap<Uuid, VecDeque<Arc<SPacket>>>,
-}
-
-impl PacketList {
-    pub fn new() -> PacketList {
-        Default::default()
-    }
-
-    pub fn insert_to_all_players(&mut self, packet: Arc<SPacket>) {
-        self.to_all_players.push_back(packet);
-    }
-
-    pub fn insert_to_all_player_except(&mut self, player: Uuid, packet: Arc<SPacket>) {
-        self.to_all_player_except.entry(player).or_insert(VecDeque::new()).push_back(packet);
-    }
-
-    pub fn insert_to_players(&mut self, player: Uuid, packet: Arc<SPacket>) {
-        self.to_players.entry(player).or_insert(VecDeque::new()).push_back(packet);
-    }
-
-    pub fn clear(&mut self) {
-        self.to_all_players.clear();
-        self.to_all_player_except.clear();
-        self.to_players.clear();
-    }
-}
-
 #[derive(Fail, Debug)]
 pub enum Error {
     #[fail(display = "io error: {}", _0)]
@@ -92,13 +58,15 @@ impl From<network::Error> for Error {
 }
 
 pub const MS_PER_TICK: u64 = 50;
+pub const TICKS_PER_SEC: u64 = 1000 / MS_PER_TICK;
 
 /// information players need to know about server
 pub struct ServerInfo {
     pub view_distance: u8,
     pub player_view_distance: u8,
+    pub difficulty: Difficulty,
+    pub level_type: LevelType,
     pub tick: u64,
-    pub players_info: HashMap<Uuid, PlayerInfo>,
 }
 
 pub struct Worlds {
@@ -125,6 +93,12 @@ impl Worlds {
     }
 }
 
+pub struct ServerContext<'a> {
+    pub player_list: &'a PlayerList,
+    pub world: &'a mut World,
+    pub server_info: &'a ServerInfo,
+}
+
 pub struct Server {
     running: Arc<Mutex<bool>>,
 
@@ -134,7 +108,6 @@ pub struct Server {
 
     worlds: Worlds,
 
-    packet_list: PacketList,
     current_time: Instant,
     start_time: Instant,
     next_entity_id: i32,
@@ -174,15 +147,15 @@ impl Server {
 
             worlds: Worlds::new(),
 
-            packet_list: PacketList::new(),
             current_time: Instant::now(),
             start_time: Instant::now(),
             next_entity_id: 0,
             server_info: ServerInfo {
                 view_distance: 10,
                 player_view_distance: 3,
+                difficulty: Difficulty::Peaceful,
+                level_type: LevelType::Flat,
                 tick: 0,
-                players_info: HashMap::new(),
             },
         })
     }
@@ -229,113 +202,10 @@ impl Server {
     fn add_new_player(&mut self, mut p: Player) {
         let entity_id = self.get_next_entity_id();
         p.set_entity_id(entity_id);
-        p.send_packet(Arc::new(SPacket::PlayJoinGame {
-            entity_id,
-            gamemode: Gamemode::Creative as u8,
-            dimension: Dimension::End as i8,
-            difficulty: Difficulty::Peaceful as u8,
-            max_players: 100,
-            level_type: LevelType::Flat.as_str(),
-            reduced_debug_info: false,
-        }));
-        p.send_packet(Arc::new(SPacket::PlayPluginMessage {
-            channel: "MC|Brand",
-            data: "Quartz".as_bytes().to_vec(),
-        }));
-        p.send_packet(Arc::new(SPacket::PlayServerDifficulty {
-            difficulty: Difficulty::Peaceful as u8,
-        }));
-        p.send_packet(Arc::new(SPacket::PlayPlayerAbilities {
-            flags: 0x08 | 0x04,
-            flying_speed: 0.05,
-            field_of_view_modifier: 0.5,
-        }));
-
-        p.send_packet(Arc::new(SPacket::PlayPlayerListHeaderAndFooter {
-            header: Chat::from(text::parse_legacy_ex("&4&lQuartz server", '&')),
-            footer: Chat::from(text::parse_legacy_ex("&6&lAll hail Emperor", '&')),
-        }));
-
-        let list_item_data = Arc::new(
-            SPlayPlayerListItemData {
-                uuid: p.get_uuid(),
-                action: SPlayPlayerListItemDataAction::AddPlayer {
-                    name: p.get_name().into(),
-                    gamemode: p.get_gamemode() as i32,
-                    ping: p.get_ping(),
-                    properties: Vec::new(),
-                    display_name: None,
-                },
-            }
-        );
-
-        self.packet_list.insert_to_all_players(Arc::new(SPacket::PlayPlayerListItem { players: vec![Arc::clone(&list_item_data)] }));
-        let join_msg = Chat::from(text::parse_legacy(&format!("{}{} joined the game!", Code::Yellow, p.get_name())));
-        self.packet_list.insert_to_all_players(Arc::new(SPacket::PlayChatMessage {
-            position: ChatPos::Normal,
-            message: join_msg.clone(),
-        }));
-        self.send_packet_list();
-        // for newly joined player, we need to send all other players too.
-        let mut list_item_datas = vec![list_item_data];
-        for p in self.player_list.iter() {
-            list_item_datas.push(Arc::new(SPlayPlayerListItemData {
-                uuid: p.get_uuid(),
-                action: SPlayPlayerListItemDataAction::AddPlayer {
-                    name: p.get_name().into(),
-                    gamemode: p.get_gamemode() as i32,
-                    ping: p.get_ping(),
-                    properties: Vec::new(),
-                    display_name: None,
-                },
-            }));
-        }
-
-        p.send_packet(Arc::new(SPacket::PlayPlayerListItem { players: list_item_datas }));
-        p.send_packet(Arc::new(SPacket::PlayChatMessage {
-            position: ChatPos::Normal,
-            message: join_msg,
-        }));
-
-        self.send_initial_chunks_for_player(&mut p);
-        self.worlds.get_world(p.get_dimension()).get_chunk(p.get_chunk_pos(), p.get_uuid()).insert_player(p.get_uuid());
-
-        p.send_packet(Arc::new(SPacket::PlaySpawnPosition {
-            location: ::proto::data::Position { x: 0, y: 82, z: 0 },
-        }));
-        let (x, y, z, yaw, pitch) = (p.get_pos().x, p.get_pos().y, p.get_pos().z, p.get_yaw(), p.get_pitch());
-        p.send_packet(Arc::new(SPacket::PlayPlayerPositionAndLook {
-            x,
-            y,
-            z,
-            yaw: yaw as f32,
-            pitch: pitch as f32,
-            flags: 0,
-        }));
-
-        self.server_info.players_info.insert(p.get_uuid(), p.create_player_info());
+        p.set_join_tick(self.server_info.tick);
+        let world = self.worlds.get_world(p.get_dimension());
+        p.join(&mut ServerContext { server_info: &self.server_info, player_list: &self.player_list, world });
         self.player_list.add_player(p);
-    }
-
-    fn send_initial_chunks_for_player(&mut self, p: &mut Player) {
-        let chunk_rect = p.get_chunk_rectangle(self.server_info.view_distance);
-
-        let (uuid, dimension) = (p.get_uuid(), p.get_dimension());
-        let sky_light_sent = self.worlds.get_world(dimension).get_properties().has_sky_light();
-
-        util::iter_foreach_every(chunk_rect.chunks_iter()
-                                           .map(|pos| self.worlds.get_world(dimension).get_chunk(pos, uuid).to_proto_map_chunk_bulk_data()),
-                                 |i| i % 30 == 0 && i != 0,
-                                 |q| {
-                                     let mut chunks = Vec::new();
-                                     while let Some(chunk) = q.pop_front() {
-                                         chunks.push(chunk);
-                                     }
-                                     p.send_packet(Arc::new(SPacket::PlayMapChunkBulk {
-                                         sky_light_sent,
-                                         chunks,
-                                     }));
-                                 });
     }
 
     fn accept_new_players(&mut self) {
@@ -353,6 +223,7 @@ impl Server {
     fn remove_disconnected_players(&mut self) {
         let mut to_remove = Vec::new();
         for p in self.player_list.iter() {
+            let p = p.borrow();
             if !p.get_connected() {
                 to_remove.push(p.get_uuid());
             }
@@ -360,77 +231,17 @@ impl Server {
 
         for u in to_remove {
             let mut p = self.player_list.remove_by_uuid(&u).unwrap();
-            self.server_info.players_info.remove(&u);
-
-            self.packet_list.insert_to_all_players(Arc::new(SPacket::PlayPlayerListItem {
-                players: vec![Arc::new(SPlayPlayerListItemData {
-                    uuid: u,
-                    action: SPlayPlayerListItemDataAction::RemovePlayer,
-                })]
-            }));
-
-            self.packet_list.insert_to_all_players(Arc::new(SPacket::PlayChatMessage {
-                position: ChatPos::Normal,
-                message: Chat::from(text::parse_legacy(&format!("{}{} left the game",
-                                                                Code::Yellow,
-                                                                p.get_name()))),
-            }));
-
-            {
-                let world = self.worlds.get_world(p.get_dimension());
-                world.get_chunk(p.get_chunk_pos(), p.get_uuid()).remove_player(&p.get_uuid());
-                p.despawn(&mut self.server_info, world, &mut self.packet_list);
-
-                for chunk_pos in p.get_chunk_rectangle(self.server_info.view_distance).chunks_iter() {
-                    world.unload_chunk_if_required(chunk_pos, p.get_uuid());
-                }
-            }
-
-            self.send_packet_list();
+            let world = self.worlds.get_world(p.get_dimension());
+            p.leave(&mut ServerContext { player_list: &self.player_list, server_info: &self.server_info, world });
         }
     }
 
     fn tick_players(&mut self) {
-        for p in self.player_list.iter_mut() {
+        for p in self.player_list.iter() {
+            let mut p = p.borrow_mut();
             let world = self.worlds.get_world(p.get_dimension());
-            p.tick(&self.server_info, world, &mut self.packet_list);
+            p.tick(&mut ServerContext { player_list: &self.player_list, server_info: &self.server_info, world });
         }
-
-        self.send_packet_list();
-    }
-
-    /// sends packets in packetlist accordingly, and clears it
-    fn send_packet_list(&mut self) {
-        while let Some(packet) = self.packet_list.to_all_players.pop_front() {
-            for p in self.player_list.iter_mut() {
-                p.send_packet(Arc::clone(&packet));
-            }
-        }
-
-        for (&uuid, packets) in &mut self.packet_list.to_all_player_except {
-            let mut packets_vec = Vec::new();
-            while let Some(packet) = packets.pop_front() {
-                packets_vec.push(packet);
-            }
-
-            for p in self.player_list.iter_mut() {
-                if p.get_uuid() != uuid {
-                    for packet in &packets_vec {
-                        p.send_packet(Arc::clone(packet));
-                    }
-                }
-            }
-        }
-
-        for (&uuid, packets) in &mut self.packet_list.to_players {
-            if let Some(p) = self.player_list.get_by_uuid(&uuid) {
-                while let Some(packet) = packets.pop_front() {
-                    p.send_packet(packet);
-                }
-            }
-        }
-
-        self.packet_list.clear();
     }
 
     fn tick(&mut self) {

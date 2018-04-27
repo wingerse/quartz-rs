@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use self::chunk::{Chunk, ChunkPos};
 use self::world_properties::WorldProperties;
+use math::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LevelType {
@@ -39,12 +40,17 @@ pub enum Dimension {
 
 pub struct World {
     chunks: HashMap<ChunkPos, Chunk>,
+    spawn_pos: Vec3,
     properties: WorldProperties,
 }
 
 impl World {
     pub fn new(dimension: Dimension) -> World {
-        World { chunks: HashMap::new(), properties: WorldProperties::new(dimension) }
+        World { chunks: HashMap::new(), properties: WorldProperties::new(dimension), spawn_pos: Vec3::ZERO }
+    }
+
+    pub fn get_spawn_pos(&self) -> Vec3 {
+        self.spawn_pos
     }
 
     /// gets the chunk from the world, loaded if required, and adds player as who see.
@@ -59,10 +65,12 @@ impl World {
     }
 
     /// unloads the chunk when it is abandoned. removes player as who see.
+    /// Chunks in spawn (radius of 10) will never be unloaded.
     pub fn unload_chunk_if_required(&mut self, pos: ChunkPos, player: Uuid) {
+        let spawn_rect = ChunkRectangle::centered(self.get_spawn_pos().into(), 10);
         let unload = if let Some(chk) = self.chunks.get_mut(&pos) {
             chk.remove_player_who_see(&player);
-            if chk.is_abandoned() {
+            if chk.is_abandoned() && !spawn_rect.contains(pos) {
                 true
             } else {
                 false
@@ -110,6 +118,11 @@ impl ChunkRectangle {
             min: ChunkPos::new(i32::min(pos1.x, pos2.x), i32::min(pos1.z, pos2.z)),
             max: ChunkPos::new(i32::max(pos1.x, pos2.x), i32::max(pos1.z, pos2.z)),
         }
+    }
+
+    pub fn centered(center: ChunkPos, radius: u8) -> ChunkRectangle {
+        ChunkRectangle::new(ChunkPos::new(center.x - radius as i32, center.z - radius as i32),
+                            ChunkPos::new(center.x + radius as i32, center.z + radius as i32))
     }
 
     pub fn contains(&self, pos: ChunkPos) -> bool {

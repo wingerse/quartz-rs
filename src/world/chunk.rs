@@ -5,6 +5,7 @@ use uuid::Uuid;
 use collections::{NibbleArray, VarbitArray};
 use proto::data::{self, GroundUpContinuous, GroundUpNonContinuous};
 use proto::packets::{SPacket, SPlayChunkDataData, SPlayMapChunkBulkData};
+use math::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockID {
@@ -168,6 +169,10 @@ impl ChunkPos {
     pub fn new(x: i32, z: i32) -> ChunkPos {
         ChunkPos { x, z }
     }
+}
+
+impl From<Vec3> for ChunkPos {
+    fn from(pos: Vec3) -> Self { ChunkPos::new((pos.x / 16.0).floor() as i32, (pos.z / 16.0).floor() as i32) }
 }
 
 #[derive(Debug)]
