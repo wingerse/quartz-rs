@@ -25,6 +25,8 @@ mod entity;
 mod math;
 mod inventory;
 mod util;
+mod block;
+mod sound;
 
 use std::net::{Ipv4Addr, SocketAddr};
 

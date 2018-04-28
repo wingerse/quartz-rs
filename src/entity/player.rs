@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use proto::packets::{CPacket, SPacket, SPlayPlayerListItemDataAction, SPlayPlayerListItemData};
 use math::Vec3;
-use world::chunk::{ChunkPos, Chunk, BlockID};
-use world::{World, Dimension, ChunkRectangle, LevelType, BlockPos};
+use world::chunk::{ChunkPos, Chunk};
+use world::{World, Dimension, ChunkRectangle, LevelType};
 use entity::metadata::{EntityMetadata, MetadataEntry};
 use server::{ServerContext, ServerInfo, Gamemode, Difficulty, TICKS_PER_SEC};
 use server::playerlist::PlayerList;
@@ -17,6 +17,7 @@ use text::{self, ChatPos, Code};
 use text::chat::Chat;
 use binary::double_to_fixed_point;
 use proto::data::SlotData;
+use block::{Facing, BlockPos, BlockID, Block};
 use util;
 
 #[derive(Debug)]
@@ -72,7 +73,7 @@ impl Player {
             pitch: 0.0,
             on_ground: true,
 
-            dimension: Dimension::Overworld,
+            dimension: Dimension::Nether,
             gamemode: Gamemode::Creative,
             entity_id: 0,
             players_in_vicinity: HashSet::new(),
@@ -132,7 +133,7 @@ impl Player {
 
     fn send_packet_to_all_players(&mut self, ctx: &ServerContext, packet: Arc<SPacket>) {
         self.send_packet(Arc::clone(&packet));
-        ctx.player_list.send_packet_to_players_except(self.uuid, Arc::clone(&packet));
+        ctx.player_list.send_packet_to_players_except(self.uuid, packet);
     }
 
     fn send_packet_to_vicinity(&self, ctx: &ServerContext, packet: Arc<SPacket>) {
@@ -148,6 +149,11 @@ impl Player {
                 ctx.player_list.send_packet_to_player(p, Arc::clone(&packet));
             }
         }
+    }
+
+    fn send_packet_to_self_and_chunk_vicinity(&mut self, chunk_pos: ChunkPos, ctx: &mut ServerContext, packet: Arc<SPacket>) {
+        self.send_packet(Arc::clone(&packet));
+        self.send_packet_to_chunk_vicinity(chunk_pos, ctx, packet);
     }
 
     pub fn get_pos(&self) -> Vec3 {
@@ -238,7 +244,7 @@ impl Player {
         self.send_packet(Arc::new(SPacket::PlayPlayerAbilities {
             flags: 0x08 | 0x04,
             flying_speed: 0.05,
-            field_of_view_modifier: 1.0,
+            field_of_view_modifier: 2.0,
         }));
 
         self.send_packet(Arc::new(SPacket::PlayPlayerListHeaderAndFooter {
@@ -516,6 +522,7 @@ impl Player {
                         match status {
                             0 => {
                                 if self.gamemode == Gamemode::Creative {
+                                    let prev_block = match ctx.world.get_block(location) { Some(x) => x, None => continue };
                                     ctx.world.set_block(location, BlockID::AIR);
                                     let chunk_pos = ChunkPos::from(location);
                                     let packet = Arc::new(SPacket::PlayBlockChange {
@@ -523,6 +530,16 @@ impl Player {
                                         block_id: BlockID::AIR.to_u16() as i32,
                                     });
                                     self.send_packet_to_chunk_vicinity(chunk_pos, ctx, packet);
+
+                                    let sounds = prev_block.get_type().get_sounds();
+                                    if let Some(sounds) = sounds {
+                                        self.send_packet_to_chunk_vicinity(chunk_pos, ctx, Arc::new(SPacket::PlaySoundEffect {
+                                            sound: sounds.breaks,
+                                            effect_pos_x: location.x as f64 + 0.5,
+                                            effect_pos_y: location.y as f64 + 0.5,
+                                            effect_pos_z: location.z as f64 + 0.5,
+                                        }));
+                                    }
                                 }
                             },
                             _ => (),
@@ -531,7 +548,10 @@ impl Player {
                     CPacket::PlayPlayerBlockPlacement { location, face, held_item, cursor_pos_x, cursor_pos_y, cursor_pos_z } => {
                         if self.gamemode == Gamemode::Creative {
                             if let SlotData::Some{block_id, item_damage, ..} = held_item {
-                                let block = BlockID::new(block_id as u8, item_damage as u8);
+                                let block_id = match Block::from_byte(block_id as u8) { Some(x) => x, None => continue };
+                                let block = BlockID::new(block_id, item_damage as u8);
+                                let facing = match Facing::from_byte(face) { Some(x) => x, None => continue };
+                                let location = match location.offset(facing) { Some(x) => x, None => continue };
 
                                 ctx.world.set_block(location, block);
 
@@ -541,6 +561,14 @@ impl Player {
                                     block_id: block.to_u16() as i32,
                                 });
                                 self.send_packet_to_chunk_vicinity(chunk_pos, ctx, packet);
+                                if let Some(sounds) = block_id.get_sounds() {
+                                    self.send_packet_to_self_and_chunk_vicinity(chunk_pos, ctx, Arc::new(SPacket::PlaySoundEffect {
+                                        sound: sounds.place,
+                                        effect_pos_x: location.x as f64 + 0.5,
+                                        effect_pos_y: location.y as f64 + 0.5,
+                                        effect_pos_z: location.z as f64 + 0.5,
+                                    }));
+                                }
                             }
                         }
                     }

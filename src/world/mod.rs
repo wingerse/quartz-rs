@@ -7,11 +7,13 @@ use std::io::{self, Read, Write};
 
 use uuid::Uuid;
 
-use self::chunk::{Chunk, ChunkPos, BlockID};
+use self::chunk::{Chunk, ChunkPos};
 use self::world_properties::WorldProperties;
+use block::BlockID;
 use math::Vec3;
 use proto;
 use binary;
+use block::BlockPos;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LevelType {
@@ -112,42 +114,6 @@ impl World {
 
     pub fn get_properties(&self) -> &WorldProperties {
         &self.properties
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BlockPos {
-    pub x: i32,
-    pub y: u8,
-    pub z: i32,
-}
-
-impl BlockPos {
-    pub const ZERO: BlockPos = BlockPos { x: 0, y: 0, z: 0 };
-
-    pub fn new(x: i32, y: u8, z: i32) -> BlockPos {
-        BlockPos { x, y, z }
-    }
-
-    pub fn write_proto<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        let mut val: u64 = (self.z & 0x3ff_ffff) as u64;
-        val |= (self.y as u64 & 0xfff) << 26;
-        val |= (self.x as u64 & 0x3ff_ffff) << 38;
-        binary::write_long(w, val as i64)
-    }
-
-    pub fn read_proto<R: Read>(r: &mut R) -> proto::Result<BlockPos> {
-        let val = binary::read_long(r)?;
-        let x = (val >> 38) as i32;
-        let y = ((val << 26) >> 52) as u8;
-        let z = (val as i32) << 6 >> 6;
-        Ok(BlockPos { x, y, z })
-    }
-
-    pub fn to_relative_chunk_pos(&self) -> (u8, u8, u8) {
-        let x = if self.x < 0 { 16 + self.x % 16 } else { self.x % 16 };
-        let z = if self.z < 0 { 16 + self.z % 16 } else { self.z % 16 };
-        (x as u8, self.y, z as u8)
     }
 }
 

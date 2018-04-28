@@ -6,34 +6,7 @@ use collections::{NibbleArray, VarbitArray};
 use proto::data::{self, GroundUpContinuous, GroundUpNonContinuous};
 use proto::packets::{SPacket, SPlayChunkDataData, SPlayMapChunkBulkData};
 use math::Vec3;
-use world::BlockPos;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BlockID {
-    typ: u8,
-    meta: u8,
-}
-
-impl BlockID {
-    pub const AIR: BlockID = BlockID { typ: 0, meta: 0 };
-
-    pub fn new(typ: u8, meta: u8) -> BlockID {
-        BlockID {
-            typ,
-            meta: meta & 0x0f,
-        }
-    }
-
-    pub fn get_type(&self) -> u8 { self.typ }
-
-    pub fn set_type(&mut self, typ: u8) { self.typ = typ; }
-
-    pub fn get_meta(&self) -> u8 { self.meta }
-
-    pub fn set_meta(&mut self, meta: u8) { self.meta = meta & 0x0f; }
-
-    pub fn to_u16(&self) -> u16 { ((self.typ as u16) << 4) | self.meta as u16 }
-}
+use block::{BlockPos, BlockID, Block};
 
 pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
 
@@ -76,9 +49,9 @@ impl ChunkSection {
             return;
         }
 
-        if previous == BlockID::AIR {
+        if previous.get_type() == Block::Air {
             self.air_count -= 1;
-        } else if b == BlockID::AIR {
+        } else if b.get_type() == Block::Air {
             self.air_count += 1;
         }
 
@@ -261,7 +234,7 @@ impl Chunk {
                 s.set_block(x, y % 16, z, b);
             }
             None => {
-                if b == BlockID::AIR {
+                if b.get_type() == Block::Air {
                     return;
                 }
 

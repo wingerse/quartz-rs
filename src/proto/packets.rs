@@ -12,7 +12,8 @@ use proto::{data, Error, Result, State};
 use entity::metadata::EntityMetadata;
 use text;
 use text::chat::Chat;
-use world::BlockPos;
+use block::BlockPos;
+use sound::Sound;
 
 #[derive(Debug)]
 pub enum CPacket {
@@ -574,12 +575,10 @@ pub enum SPacket {
         disable_relative_volume: bool,
     },
     PlaySoundEffect {
-        sound_name: &'static str,
+        sound: Sound,
         effect_pos_x: f64,
         effect_pos_y: f64,
         effect_pos_z: f64,
-        volume: f32,
-        pitch: u8,
     },
     PlayParticle {
         particle_id: i32,
@@ -1300,19 +1299,17 @@ impl SPacket {
                 write_bool(w, disable_relative_volume)?;
             }
             SPacket::PlaySoundEffect {
-                sound_name,
+                sound,
                 effect_pos_x,
                 effect_pos_y,
                 effect_pos_z,
-                volume,
-                pitch,
             } => {
-                data::write_string(w, sound_name)?;
-                write_int(w, double_to_fixed_point(effect_pos_x))?;
-                write_int(w, double_to_fixed_point(effect_pos_y))?;
-                write_int(w, double_to_fixed_point(effect_pos_z))?;
-                write_float(w, volume)?;
-                write_ubyte(w, pitch)?;
+                data::write_string(w, sound.name)?;
+                write_int(w, (effect_pos_x * 8.0) as i32)?;
+                write_int(w, (effect_pos_y * 8.0) as i32)?;
+                write_int(w, (effect_pos_z * 8.0) as i32)?;
+                write_float(w, sound.volume)?;
+                write_ubyte(w, (sound.pitch * 63.0) as u8)?;
             }
             SPacket::PlayParticle {
                 particle_id,
