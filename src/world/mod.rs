@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use self::chunk::{Chunk, ChunkPos};
 use self::world_properties::WorldProperties;
-use block::BlockID;
+use block::BlockStateId;
 use math::Vec3;
 use proto;
 use binary;
@@ -58,7 +58,7 @@ impl World {
         self.spawn_pos
     }
 
-    pub fn get_block(&self, pos: BlockPos) -> Option<BlockID> {
+    pub fn get_block(&self, pos: BlockPos) -> Option<BlockStateId> {
         self.chunks.get(&ChunkPos::from(pos)).and_then(|c| {
             let (x, y, z) = pos.to_relative_chunk_pos();
             Some(c.get_block(x, y, z))
@@ -68,7 +68,7 @@ impl World {
     /// Sets the block at given position.
     /// # Panics
     /// If the chunk is not loaded, it will panic.
-    pub fn set_block(&mut self, pos: BlockPos, block: BlockID) {
+    pub fn set_block(&mut self, pos: BlockPos, block: BlockStateId) {
         if let Some(c) = self.chunks.get_mut(&ChunkPos::from(pos)) {
             let (x, y, z) = pos.to_relative_chunk_pos();
             c.set_block(x, y, z, block);

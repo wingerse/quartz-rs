@@ -1,3 +1,6 @@
+#![feature(get_type_id)]
+#![feature(const_type_id)]
+
 extern crate base64;
 extern crate byteorder;
 #[macro_use]
@@ -13,6 +16,8 @@ extern crate failure;
 extern crate failure_derive;
 extern crate noise;
 
+#[macro_use]
+mod util;
 mod nbt;
 mod binary;
 mod text;
@@ -23,10 +28,9 @@ mod world;
 mod collections;
 mod entity;
 mod math;
-mod inventory;
-mod util;
 mod block;
 mod sound;
+mod item;
 
 use std::net::{Ipv4Addr, SocketAddr};
 

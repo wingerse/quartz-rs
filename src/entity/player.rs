@@ -3,8 +3,14 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::net::SocketAddr;
 use std::collections::{HashMap, HashSet};
 use std::time::{Instant, Duration};
+use std::fmt;
 
 use uuid::Uuid;
+use serde::{Serialize, Deserialize, Deserializer, Serializer};
+use serde::de::{Visitor, Error};
+use serde::ser::Error as SerError;
+use base64;
+use serde_json;
 
 use proto::packets::{CPacket, SPacket, SPlayPlayerListItemDataAction, SPlayPlayerListItemData};
 use math::Vec3;
@@ -17,7 +23,9 @@ use text::{self, ChatPos, Code};
 use text::chat::Chat;
 use binary::double_to_fixed_point;
 use proto::data::SlotData;
-use block::{Facing, BlockPos, BlockID, Block};
+use block::{Facing, BlockPos, BlockStateId, Block};
+use item::item_stack::ItemStack;
+use item::BlockItem;
 use util;
 
 #[derive(Debug)]
@@ -73,7 +81,7 @@ impl Player {
             pitch: 0.0,
             on_ground: true,
 
-            dimension: Dimension::Nether,
+            dimension: Dimension::Overworld,
             gamemode: Gamemode::Creative,
             entity_id: 0,
             players_in_vicinity: HashSet::new(),
@@ -300,6 +308,15 @@ impl Player {
         self.send_packet(Arc::new(SPacket::PlaySpawnPosition {
             location: BlockPos::new(0, 80, 0),
         }));
+        self.send_packet(Arc::new(SPacket::PlaySetSlot {
+            window_id: 0,
+            slot: 36,
+            slot_data: ItemStack::new(Box::new(BlockItem {
+                id: BlockStateId::new(Block::Chest, 0),
+                block_entity: Block::Chest.create_new_block_entity(),
+                can_place_on: None,
+            }), 10).to_slot_data(),
+        }));
         let (x, y, z, yaw, pitch) = (self.pos.x, self.pos.y, self.pos.z, self.yaw, self.pitch);
         self.send_packet(Arc::new(SPacket::PlayPlayerPositionAndLook {
             x,
@@ -523,11 +540,11 @@ impl Player {
                             0 => {
                                 if self.gamemode == Gamemode::Creative {
                                     let prev_block = match ctx.world.get_block(location) { Some(x) => x, None => continue };
-                                    ctx.world.set_block(location, BlockID::AIR);
+                                    ctx.world.set_block(location, BlockStateId::AIR);
                                     let chunk_pos = ChunkPos::from(location);
                                     let packet = Arc::new(SPacket::PlayBlockChange {
                                         location,
-                                        block_id: BlockID::AIR.to_u16() as i32,
+                                        block_id: BlockStateId::AIR.to_u16() as i32,
                                     });
                                     self.send_packet_to_chunk_vicinity(chunk_pos, ctx, packet);
 
@@ -547,10 +564,10 @@ impl Player {
                     }
                     CPacket::PlayPlayerBlockPlacement { location, face, held_item, cursor_pos_x, cursor_pos_y, cursor_pos_z } => {
                         if self.gamemode == Gamemode::Creative {
-                            if let SlotData::Some{block_id, item_damage, ..} = held_item {
-                                let block_id = match Block::from_byte(block_id as u8) { Some(x) => x, None => continue };
-                                let block = BlockID::new(block_id, item_damage as u8);
-                                let facing = match Facing::from_byte(face) { Some(x) => x, None => continue };
+                            if let SlotData::Some{id, item_damage, ..} = held_item {
+                                let id = match Block::from_u8(id as u8) { Some(x) => x, None => continue };
+                                let block = BlockStateId::new(id, item_damage as u8);
+                                let facing = match Facing::from_i8(face) { Some(x) => x, None => continue };
                                 let location = match location.offset(facing) { Some(x) => x, None => continue };
 
                                 ctx.world.set_block(location, block);
@@ -561,7 +578,7 @@ impl Player {
                                     block_id: block.to_u16() as i32,
                                 });
                                 self.send_packet_to_chunk_vicinity(chunk_pos, ctx, packet);
-                                if let Some(sounds) = block_id.get_sounds() {
+                                if let Some(sounds) = id.get_sounds() {
                                     self.send_packet_to_self_and_chunk_vicinity(chunk_pos, ctx, Arc::new(SPacket::PlaySoundEffect {
                                         sound: sounds.place,
                                         effect_pos_x: location.x as f64 + 0.5,
@@ -628,4 +645,82 @@ impl Player {
             }
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct UuidWrapper(pub Uuid);
+
+impl Serialize for UuidWrapper {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
+        S: Serializer {
+        serializer.serialize_str(&self.0.simple().to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for UuidWrapper {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        Ok(UuidWrapper(Uuid::parse_str(&String::deserialize(deserializer)?).map_err(D::Error::custom)?))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlayerProfile {
+    pub id: UuidWrapper,
+    pub name: String,
+    pub properties: Vec<PlayerProperty>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlayerProperty {
+    pub name: String,
+    pub value: PlayerPropertyValueWrapper,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlayerPropertyValue {
+    pub timestamp: u64,
+    #[serde(rename = "profileId")]
+    pub profile_id: UuidWrapper,
+    #[serde(rename = "profileName")]
+    pub profile_name: String,
+    pub textures: Textures,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlayerPropertyValueWrapper(PlayerPropertyValue);
+
+impl Serialize for PlayerPropertyValueWrapper {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
+        S: Serializer {
+        serializer.serialize_str(&base64::encode(&serde_json::to_string(&self.0).map_err(S::Error::custom)?))
+    }
+}
+
+impl<'de> Deserialize<'de> for PlayerPropertyValueWrapper {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        let s = String::deserialize(deserializer)?;
+        let decoded = String::from_utf8(base64::decode(&s).map_err(D::Error::custom)?).map_err(D::Error::custom)?;
+
+        Ok(PlayerPropertyValueWrapper(serde_json::from_str(&decoded).map_err(D::Error::custom)?))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub struct Textures {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub skin: Option<SkinOrCape>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub cape: Option<SkinOrCape>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SkinOrCape {
+    pub url: String,
 }

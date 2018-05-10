@@ -7,7 +7,7 @@ use serde_json;
 use uuid::Uuid;
 
 use binary::*;
-use nbt::NBT;
+use nbt::Nbt;
 use proto::{data, Error, Result, State};
 use entity::metadata::EntityMetadata;
 use text;
@@ -649,7 +649,7 @@ pub enum SPacket {
     PlayUpdateBlockEntity {
         location: BlockPos,
         action: u8,
-        nbt_data: NBT,
+        nbt_data: Nbt,
     },
     PlayOpenSignEditor {
         location: BlockPos,
@@ -720,7 +720,7 @@ pub enum SPacket {
     },
     PlayUpdateEntityNBT {
         entity_id: i32,
-        tag: NBT,
+        tag: Nbt,
     },
     StatusResponse {
         data: SStatusResponseData,

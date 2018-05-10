@@ -7,9 +7,11 @@ use std::io;
 use text::Code;
 
 mod color;
+
 pub use self::color::*;
 
 mod events;
+
 pub use self::events::*;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -89,29 +91,10 @@ pub enum Component {
     Selector(SelectorComponent),
 }
 
-impl From<StringComponent> for Component {
-    fn from(f: StringComponent) -> Self {
-        Component::String(f)
-    }
-}
-
-impl From<TranslationComponent> for Component {
-    fn from(f: TranslationComponent) -> Self {
-        Component::Translation(f)
-    }
-}
-
-impl From<ScoreComponent> for Component {
-    fn from(f: ScoreComponent) -> Self {
-        Component::Score(f)
-    }
-}
-
-impl From<SelectorComponent> for Component {
-    fn from(f: SelectorComponent) -> Self {
-        Component::Selector(f)
-    }
-}
+impl_from_for_newtype_enum!(Component::String, StringComponent);
+impl_from_for_newtype_enum!(Component::Translation, TranslationComponent);
+impl_from_for_newtype_enum!(Component::Score, ScoreComponent);
+impl_from_for_newtype_enum!(Component::Selector, SelectorComponent);
 
 impl Component {
     fn get_base(&mut self) -> &mut Base {
@@ -126,6 +109,12 @@ impl Component {
 
 #[derive(Debug, Serialize, Clone)]
 pub struct Wrapper(pub Component);
+
+impl Default for Wrapper {
+    fn default() -> Self {
+        Wrapper(Component::String(StringComponent::default()))
+    }
+}
 
 impl<'de> Deserialize<'de> for Wrapper {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -178,7 +167,7 @@ impl<'de> Deserialize<'de> for Wrapper {
     }
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, Default)]
 // box to reduce size.
 pub struct Chat(pub Box<Wrapper>);
 
@@ -218,9 +207,7 @@ pub enum Error {
     JSONError(#[cause] serde_json::Error),
 }
 
-impl From<serde_json::Error> for Error {
-    fn from(x: serde_json::Error) -> Self { Error::JSONError(x) }
-}
+impl_from_for_newtype_enum!(Error::JSONError, serde_json::Error);
 
 impl Chat {
     pub fn write_proto<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
@@ -238,6 +225,7 @@ impl Chat {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn test_enum_ser() {
         let e = Color::Black;
@@ -289,7 +277,7 @@ mod tests {
 
         let com: Wrapper = serde_json::from_str("[1, 2, \"hi\"]").unwrap();
         match com.0 {
-            Component::String(s) =>  { 
+            Component::String(s) => {
                 assert_eq!(s.text, "1");
                 let extra = s.base.extra.as_ref().unwrap();
                 match extra[0].0 {

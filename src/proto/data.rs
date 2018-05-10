@@ -4,7 +4,7 @@ use std::io::{self, BufRead, Read, Write};
 use uuid;
 
 use binary;
-use nbt;
+use nbt::Nbt;
 use proto::Result;
 use world::chunk::CHUNK_SECTION_BLOCK_COUNT;
 
@@ -48,10 +48,10 @@ pub fn read_angle<R: Read>(r: &mut R) -> io::Result<f64> {
 pub enum SlotData {
     Empty,
     Some {
-        block_id: i16,
+        id: i16,
         item_count: i8,
         item_damage: i16,
-        nbt: nbt::NBT,
+        tag: Nbt,
     }
 }
 
@@ -62,15 +62,15 @@ impl SlotData {
                 binary::write_ishort(w, -1)?;
             },
             SlotData::Some {
-                block_id,
+                id,
                 item_count,
                 item_damage,
-                ref nbt
+                ref tag
             } => {
-                binary::write_ishort(w, block_id)?;
+                binary::write_ishort(w, id)?;
                 binary::write_byte(w, item_count)?;
                 binary::write_ishort(w, item_damage)?;
-                nbt.write(w)?;
+                tag.write(w)?;
             },
         }
 
@@ -78,16 +78,16 @@ impl SlotData {
     }
 
     pub fn read<R: BufRead>(r: &mut R) -> Result<SlotData> {
-        let block_id = binary::read_ishort(r)?;
-        if block_id == -1 {
+        let id = binary::read_ishort(r)?;
+        if id == -1 {
             return Ok(SlotData::Empty);
         }
 
         let item_count = binary::read_byte(r)?;
         let item_damage = binary::read_ishort(r)?;
-        let nbt = nbt::NBT::read(r)?;
+        let tag = Nbt::read(r)?;
 
-        Ok(SlotData::Some{block_id, item_count, item_damage, nbt})
+        Ok(SlotData::Some{ id, item_count, item_damage, tag })
     }
 }
 

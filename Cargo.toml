@@ -1,5 +1,5 @@
 [package]
-name = "quartz"
+name = "quartz-rs"
 version = "0.1.0"
 authors = ["wingerse <aiman012@live.com>"]
 

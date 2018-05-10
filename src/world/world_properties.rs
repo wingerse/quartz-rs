@@ -1,7 +1,7 @@
 use noise::{Perlin, NoiseFn};
 
 use world::chunk::{ChunkPos, Chunk};
-use block::{BlockID, Block};
+use block::{BlockStateId, Block};
 use world::Dimension;
 
 /// perlin adjusted for range 0 to 1 instead of -1 to 1
@@ -39,7 +39,7 @@ impl WorldProperties {
 
         for z in 0..16 {
             for x in 0..16 {
-                chunk.set_block(x, 0, z, BlockID::new(Block::Bedrock, 0));
+                chunk.set_block(x, 0, z, BlockStateId::new(Block::Bedrock, 0));
             }
         }
 
@@ -51,7 +51,7 @@ impl WorldProperties {
                     self::perlin(world_x / 30.0 + 10.0, world_z / 20.0 + 50.0) * 5.0;
                 let y = p as u8 + 1;
                 for y in 1..=y {
-                    chunk.set_block(x, y, z, BlockID::new(Block::Grass, 0));
+                    chunk.set_block(x, y, z, BlockStateId::new(Block::Grass, 0));
                 }
             }
         }
@@ -64,14 +64,14 @@ impl WorldProperties {
 
         for z in 0..16 {
             for x in 0..16 {
-                chunk.set_block(x, 0, z, BlockID::new(Block::Bedrock, 0));
+                chunk.set_block(x, 0, z, BlockStateId::new(Block::Bedrock, 0));
             }
         }
 
         for y in 1..(80 + 1) {
             for z in 0..16 {
                 for x in 0..16 {
-                    chunk.set_block(x, y, z, BlockID::new(Block::Netherrack, 0));
+                    chunk.set_block(x, y, z, BlockStateId::new(Block::Netherrack, 0));
                 }
             }
         }
@@ -84,14 +84,14 @@ impl WorldProperties {
 
         for z in 0..16 {
             for x in 0..16 {
-                chunk.set_block(x, 0, z, BlockID::new(Block::Bedrock, 0));
+                chunk.set_block(x, 0, z, BlockStateId::new(Block::Bedrock, 0));
             }
         }
 
         for y in 1..(80 + 1) {
             for z in 0..16 {
                 for x in 0..16 {
-                    chunk.set_block(x, y, z, BlockID::new(Block::EndStone, 0));
+                    chunk.set_block(x, y, z, BlockStateId::new(Block::EndStone, 0));
                 }
             }
         }

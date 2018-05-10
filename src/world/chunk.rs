@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use uuid::Uuid;
 
@@ -6,14 +6,15 @@ use collections::{NibbleArray, VarbitArray};
 use proto::data::{self, GroundUpContinuous, GroundUpNonContinuous};
 use proto::packets::{SPacket, SPlayChunkDataData, SPlayMapChunkBulkData};
 use math::Vec3;
-use block::{BlockPos, BlockID, Block};
+use block::{BlockPos, BlockStateId, Block};
+use block::block_entity::BlockEntity;
 
 pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
 
 #[derive(Debug)]
 pub struct ChunkSection {
     // this is not used in 1.8 but saves memory as much as 2x, sacrificing performance a bit.
-    palette: Vec<BlockID>,
+    palette: Vec<BlockStateId>,
     blocks: VarbitArray,
     block_light: NibbleArray,
     sky_light: Option<NibbleArray>,
@@ -23,7 +24,7 @@ pub struct ChunkSection {
 impl ChunkSection {
     pub fn new(has_sky_light: bool) -> ChunkSection {
         ChunkSection {
-            palette: vec![BlockID::AIR],
+            palette: vec![BlockStateId::AIR],
             blocks: VarbitArray::new(4, CHUNK_SECTION_BLOCK_COUNT),
             block_light: NibbleArray::new_with_default(CHUNK_SECTION_BLOCK_COUNT, 15),
             sky_light: if has_sky_light {
@@ -39,11 +40,11 @@ impl ChunkSection {
         (y & 0x0f) as usize * 16 * 16 + (z & 0x0f) as usize * 16 + (x & 0x0f) as usize
     }
 
-    pub fn get_block(&self, x: u8, y: u8, z: u8) -> BlockID {
+    pub fn get_block(&self, x: u8, y: u8, z: u8) -> BlockStateId {
         self.palette[self.blocks.get(Self::get_linear_index(x, y, z)) as usize]
     }
 
-    pub fn set_block(&mut self, x: u8, y: u8, z: u8, b: BlockID) {
+    pub fn set_block(&mut self, x: u8, y: u8, z: u8, b: BlockStateId) {
         let previous = self.get_block(x, y, z);
         if previous == b {
             return;
@@ -162,6 +163,7 @@ pub struct Chunk {
     has_sky_light: bool,
     players_in_vicinity: HashSet<Uuid>,
     players: HashSet<Uuid>,
+    block_entities: HashMap<(u8, u8, u8), Box<BlockEntity>>,
 }
 
 impl Chunk {
@@ -172,7 +174,8 @@ impl Chunk {
             biomes: [[0; 16]; 16],
             has_sky_light,
             players_in_vicinity: HashSet::new(),
-            players: HashSet::new()
+            players: HashSet::new(),
+            block_entities: HashMap::new(),
         }
     }
 
@@ -185,12 +188,12 @@ impl Chunk {
         self.players_in_vicinity.len() == 0
     }
 
-    fn get_section(&self, y: u8) -> &Option<Box<ChunkSection>> {
-        &self.sections[(y / 16) as usize]
+    fn get_section(sections: &[Option<Box<ChunkSection>>; 16], y: u8) -> &Option<Box<ChunkSection>> {
+        &sections[(y / 16) as usize]
     }
 
-    fn get_section_mut(&mut self, y: u8) -> &mut Option<Box<ChunkSection>> {
-        &mut self.sections[(y / 16) as usize]
+    fn get_section_mut(sections: &mut [Option<Box<ChunkSection>>; 16], y: u8) -> &mut Option<Box<ChunkSection>> {
+        &mut sections[(y / 16) as usize]
     }
 
     pub fn insert_player(&mut self, p: Uuid) {
@@ -217,21 +220,28 @@ impl Chunk {
         self.players_in_vicinity.iter()
     }
 
-    pub fn get_block(&self, x: u8, y: u8, z: u8) -> BlockID {
-        let sec = self.get_section(y);
+    pub fn get_block(&self, x: u8, y: u8, z: u8) -> BlockStateId {
+        let sec = Self::get_section(&self.sections, y);
         match *sec {
             Some(ref sec) => sec.get_block(x, y % 16, z),
-            None => BlockID::AIR
+            None => BlockStateId::AIR
         }
     }
 
-    pub fn set_block(&mut self, x: u8, y: u8, z: u8, b: BlockID) {
+    pub fn set_block(&mut self, x: u8, y: u8, z: u8, b: BlockStateId) {
         let has_sky_light = self.has_sky_light;
 
-        let sec = self.get_section_mut(y);
+        let sec = Self::get_section_mut(&mut self.sections, y);
         match *sec {
             Some(ref mut s) => {
                 s.set_block(x, y % 16, z, b);
+                let block_entity = b.get_type().create_new_block_entity();
+                if let Some(block_entity) = block_entity {
+                    self.block_entities.insert((x, y, z), block_entity);
+                } else {
+                    self.block_entities.remove(&(x, y, z));
+                }
+
             }
             None => {
                 if b.get_type() == Block::Air {
@@ -240,6 +250,12 @@ impl Chunk {
 
                 let mut section = ChunkSection::new(has_sky_light);
                 section.set_block(x, y % 16, z, b);
+                let block_entity = b.get_type().create_new_block_entity();
+                if let Some(block_entity) = block_entity {
+                    self.block_entities.insert((x, y, z), block_entity);
+                } else {
+                    self.block_entities.remove(&(x, y, z));
+                }
                 *sec = Some(Box::new(section));
                 return;
             }
@@ -247,7 +263,7 @@ impl Chunk {
     }
 
     pub fn get_block_light(&self, x: u8, y: u8, z: u8) -> u8 {
-        let sec = self.get_section(y);
+        let sec = Self::get_section(&self.sections, y);
         match *sec {
             Some(ref sec) => sec.get_block_light(x, y % 16, z),
             None => 0,
@@ -255,14 +271,14 @@ impl Chunk {
     }
 
     pub fn set_block_light(&mut self, x: u8, y: u8, z: u8, light: u8) {
-        let sec = self.get_section_mut(y);
+        let sec = Self::get_section_mut(&mut self.sections, y);
         if let Some(ref mut sec) = *sec {
             sec.set_block_light(x, y % 16, z, light);
         }
     }
 
     pub fn get_sky_light(&self, x: u8, y: u8, z: u8) -> u8 {
-        let sec = self.get_section(y);
+        let sec = Self::get_section(&self.sections, y);
         match *sec {
             Some(ref sec) => sec.get_sky_light(x, y % 16, z),
             None => 0,
@@ -270,7 +286,7 @@ impl Chunk {
     }
 
     pub fn set_sky_light(&mut self, x: u8, y: u8, z: u8, light: u8) {
-        let sec = self.get_section_mut(y);
+        let sec = Self::get_section_mut(&mut self.sections, y);
         if let Some(ref mut sec) = *sec {
             sec.set_sky_light(x, y % 16, z, light);
         }

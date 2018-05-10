@@ -127,9 +127,16 @@ impl<R: Read> Reader<R> {
                 if (uncompressed_len as u32) < threshold {
                     return Err(Error::CompressedBeforeThreshold);
                 }
+                if uncompressed_len > MAX_PACKET_LEN {
+                    return Err(Error::PacketSizeExceededMaxAllowed(uncompressed_len));
+                }
                 {
+                    decompressed_data.resize(uncompressed_len as usize, 0);
                     let mut decoder = ZlibDecoder::new(&mut slice);
-                    decoder.read_to_end(&mut decompressed_data)?;
+                    decoder.read_exact(&mut decompressed_data[..])?;
+                }
+                if !slice.is_empty() {
+                    return Err(Error::PacketTooLarge(slice.len()))
                 }
                 slice = &decompressed_data[..];
             }

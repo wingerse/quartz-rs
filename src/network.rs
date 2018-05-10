@@ -242,10 +242,10 @@ impl NetworkServer {
                     Ok(p) => {
                         if let Err(e) = writer.write_packet(&p) {
                             *connected_s.lock().unwrap() = false;
-                            // normal disconnect
+/*                            // normal disconnect
                             if e.kind() == io::ErrorKind::ConnectionAborted {
                                 break;
-                            }
+                            }*/
 
                             return Err(From::from(e))
                         }
@@ -270,11 +270,11 @@ impl NetworkServer {
                 Err(e) => {
                     *connected.lock().unwrap() = false;
                     // normal disconnect
-                    if let Some(ioerr) = e.root_cause().downcast_ref::<io::Error>() {
+                    /*if let Some(ioerr) = e.root_cause().downcast_ref::<io::Error>() {
                         if ioerr.kind() == io::ErrorKind::UnexpectedEof {
                             break;
                         }
-                    }
+                    }*/
                     err = Err(e);
                     break;
                 }
