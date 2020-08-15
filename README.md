@@ -4,8 +4,7 @@ To run, install rust, install rust nightly:
 
     rustup toolchain install nightly
 
-Then run
-To run, install rust, switch to nightly, and then do:
+Then run:
 
     cargo +nightly --release
 
