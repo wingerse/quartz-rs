@@ -1,6 +1,3 @@
-#![feature(get_type_id)]
-#![feature(const_type_id)]
-
 extern crate base64;
 extern crate byteorder;
 #[macro_use]

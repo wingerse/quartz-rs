@@ -69,7 +69,7 @@ impl BlockEntity {
         const FLOWER_POT_TYPE_ID: TypeId = TypeId::of::<FlowerPot>();
         const BANNER_TYPE_ID: TypeId = TypeId::of::<Banner>();
 
-        match x.get_type_id() {
+        match x.type_id() {
             FURNACE_TYPE_ID => Self::FURNACE_ID,
             CHEST_TYPE_ID => Self::CHEST_ID,
             ENDER_CHEST_TYPE_ID => Self::ENDER_CHEST_ID,
