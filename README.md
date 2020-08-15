@@ -7,7 +7,7 @@ To run, install rust, install rust nightly:
 Then run
 To run, install rust, switch to nightly, and then do:
 
-    cargo +nightly --release`.
+    cargo +nightly --release
 
 Connect with `localhost:25565`
 
