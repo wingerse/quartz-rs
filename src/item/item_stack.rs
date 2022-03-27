@@ -6,12 +6,12 @@ use crate::proto::data::SlotData;
 
 #[derive(Debug)]
 pub struct ItemStack {
-    item: Box<Item>,
+    item: Box<dyn Item>,
     count: i8,
 }
 
 impl ItemStack {
-    pub fn new(item: Box<Item>, count: i8) -> ItemStack {
+    pub fn new(item: Box<dyn Item>, count: i8) -> ItemStack {
         ItemStack { item, count }
     }
 
@@ -21,8 +21,12 @@ impl ItemStack {
         if let Some(slot) = slot {
             compound.0.insert("Slot".into(), (slot as i8).into());
         }
-        compound.0.insert("Damage".into(), self.item.get_damage_value().into());
-        compound.0.insert("id".into(), self.item.get_name().to_string().into());
+        compound
+            .0
+            .insert("Damage".into(), self.item.get_damage_value().into());
+        compound
+            .0
+            .insert("id".into(), self.item.get_name().to_string().into());
         let mut tag = Compound(HashMap::new());
         self.item.update_tag(&mut tag);
         if !tag.0.is_empty() {
@@ -40,7 +44,11 @@ impl ItemStack {
             tag: {
                 let mut tag = Compound(HashMap::new());
                 self.item.update_tag(&mut tag);
-                if tag.0.is_empty() { Nbt::Empty } else { Nbt::Some("tag".into(), tag) }
+                if tag.0.is_empty() {
+                    Nbt::Empty
+                } else {
+                    Nbt::Some("tag".into(), tag)
+                }
             },
         }
     }

@@ -19,7 +19,6 @@ use crate::entity::status_effect::StatusEffect;
 use crate::item::item_stack::ItemStack;
 use crate::nbt::{Compound, DeserializeError, List, Tag};
 use crate::text::chat::Chat;
-use crate::util::AsAny;
 
 const FURNACE_ID: &'static str = "Furnance";
 const CHEST_ID: &'static str = "Chest";
@@ -43,7 +42,7 @@ const COMPARATOR_ID: &'static str = "Comparator";
 const FLOWER_POT_ID: &'static str = "FlowerPot";
 const BANNER_ID: &'static str = "Banner";
 
-pub trait BlockEntity: Debug + AsAny {
+pub trait BlockEntity: Debug {
     fn to_nbt(&self) -> Compound;
     fn id(&self) -> &'static str;
 }

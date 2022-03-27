@@ -1,13 +1,13 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 use uuid::Uuid;
 
+use crate::block::block_entity::BlockEntity;
+use crate::block::{Block, BlockPos, BlockStateId};
 use crate::collections::{NibbleArray, VarbitArray};
+use crate::math::Vec3;
 use crate::proto::data::{self, GroundUpContinuous, GroundUpNonContinuous};
 use crate::proto::packets::{SPacket, SPlayChunkDataData, SPlayMapChunkBulkData};
-use crate::math::Vec3;
-use crate::block::{BlockPos, BlockStateId, Block};
-use crate::block::block_entity::BlockEntity;
 
 pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
 
@@ -69,7 +69,10 @@ impl ChunkSection {
                 self.blocks.change_bit_size(needed_bit_size);
             }
 
-            self.blocks.set(Self::get_linear_index(x, y, z), (self.palette.len() - 1) as u64);
+            self.blocks.set(
+                Self::get_linear_index(x, y, z),
+                (self.palette.len() - 1) as u64,
+            );
         }
     }
 
@@ -130,7 +133,11 @@ impl ChunkSection {
             sky_light = Some(temp);
         }
 
-        data::ChunkSection { blocks, block_light, sky_light }
+        data::ChunkSection {
+            blocks,
+            block_light,
+            sky_light,
+        }
     }
 }
 
@@ -147,11 +154,18 @@ impl ChunkPos {
 }
 
 impl From<Vec3> for ChunkPos {
-    fn from(pos: Vec3) -> Self { ChunkPos::new((pos.x / 16.0).floor() as i32, (pos.z / 16.0).floor() as i32) }
+    fn from(pos: Vec3) -> Self {
+        ChunkPos::new((pos.x / 16.0).floor() as i32, (pos.z / 16.0).floor() as i32)
+    }
 }
 
 impl From<BlockPos> for ChunkPos {
-    fn from(pos: BlockPos) -> Self { ChunkPos::new((pos.x as f64 / 16.0).floor() as i32, (pos.z as f64 / 16.0).floor() as i32) }
+    fn from(pos: BlockPos) -> Self {
+        ChunkPos::new(
+            (pos.x as f64 / 16.0).floor() as i32,
+            (pos.z as f64 / 16.0).floor() as i32,
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -163,7 +177,7 @@ pub struct Chunk {
     has_sky_light: bool,
     players_in_vicinity: HashSet<Uuid>,
     players: HashSet<Uuid>,
-    block_entities: HashMap<(u8, u8, u8), Box<BlockEntity>>,
+    block_entities: HashMap<(u8, u8, u8), Box<dyn BlockEntity>>,
 }
 
 impl Chunk {
@@ -188,11 +202,17 @@ impl Chunk {
         self.players_in_vicinity.len() == 0
     }
 
-    fn get_section(sections: &[Option<Box<ChunkSection>>; 16], y: u8) -> &Option<Box<ChunkSection>> {
+    fn get_section(
+        sections: &[Option<Box<ChunkSection>>; 16],
+        y: u8,
+    ) -> &Option<Box<ChunkSection>> {
         &sections[(y / 16) as usize]
     }
 
-    fn get_section_mut(sections: &mut [Option<Box<ChunkSection>>; 16], y: u8) -> &mut Option<Box<ChunkSection>> {
+    fn get_section_mut(
+        sections: &mut [Option<Box<ChunkSection>>; 16],
+        y: u8,
+    ) -> &mut Option<Box<ChunkSection>> {
         &mut sections[(y / 16) as usize]
     }
 
@@ -204,7 +224,7 @@ impl Chunk {
         self.players.remove(p);
     }
 
-    pub fn players_iter(&self) -> impl Iterator<Item=&Uuid> {
+    pub fn players_iter(&self) -> impl Iterator<Item = &Uuid> {
         self.players.iter()
     }
 
@@ -216,7 +236,7 @@ impl Chunk {
         self.players_in_vicinity.remove(p);
     }
 
-    pub fn players_in_vicinity_iter(&self) -> impl Iterator<Item=&Uuid> {
+    pub fn players_in_vicinity_iter(&self) -> impl Iterator<Item = &Uuid> {
         self.players_in_vicinity.iter()
     }
 
@@ -224,7 +244,7 @@ impl Chunk {
         let sec = Self::get_section(&self.sections, y);
         match *sec {
             Some(ref sec) => sec.get_block(x, y % 16, z),
-            None => BlockStateId::AIR
+            None => BlockStateId::AIR,
         }
     }
 
@@ -241,7 +261,6 @@ impl Chunk {
                 } else {
                     self.block_entities.remove(&(x, y, z));
                 }
-
             }
             None => {
                 if b.get_type() == Block::Air {
@@ -302,7 +321,8 @@ impl Chunk {
 
         let mut primary_bit_mask = 0;
         let data = {
-            let mut sections = Vec::with_capacity(self.sections.iter().filter(|x| x.is_some()).count());
+            let mut sections =
+                Vec::with_capacity(self.sections.iter().filter(|x| x.is_some()).count());
             for (i, sec) in self.sections.iter().enumerate() {
                 if let Some(ref s) = *sec {
                     if bit_mask & (1 << i) != 0 && !(ground_up_continuous && s.is_empty()) {
@@ -313,7 +333,10 @@ impl Chunk {
             }
 
             if ground_up_continuous {
-                SPlayChunkDataData::GroundUpContinuous(GroundUpContinuous { sections: GroundUpNonContinuous { sections }, biome_array: Box::new(self.biomes) })
+                SPlayChunkDataData::GroundUpContinuous(GroundUpContinuous {
+                    sections: GroundUpNonContinuous { sections },
+                    biome_array: Box::new(self.biomes),
+                })
             } else {
                 SPlayChunkDataData::GroundUpNonContinuous(GroundUpNonContinuous { sections })
             }
@@ -330,7 +353,12 @@ impl Chunk {
     pub fn to_proto_map_chunk_bulk_data(&self) -> SPlayMapChunkBulkData {
         let mut primary_bit_mask = 0;
         let chunk = {
-            let mut sections = Vec::with_capacity(self.sections.iter().filter(|x| x.is_some() && !x.as_ref().unwrap().is_empty()).count());
+            let mut sections = Vec::with_capacity(
+                self.sections
+                    .iter()
+                    .filter(|x| x.is_some() && !x.as_ref().unwrap().is_empty())
+                    .count(),
+            );
             for (i, sec) in self.sections.iter().enumerate() {
                 if let Some(ref s) = *sec {
                     if !s.is_empty() {
@@ -340,8 +368,10 @@ impl Chunk {
                 }
             }
 
-
-            GroundUpContinuous { sections: GroundUpNonContinuous { sections }, biome_array: Box::new(self.biomes) }
+            GroundUpContinuous {
+                sections: GroundUpNonContinuous { sections },
+                biome_array: Box::new(self.biomes),
+            }
         };
 
         SPlayMapChunkBulkData {
@@ -357,12 +387,12 @@ impl Chunk {
             chunk_x: pos.x,
             chunk_z: pos.z,
             primary_bit_mask: 0,
-            data: SPlayChunkDataData::GroundUpContinuous(
-                GroundUpContinuous {
-                    sections: GroundUpNonContinuous { sections: Vec::new() },
-                    biome_array: Box::new([[0; 16]; 16]),
-                }
-            ),
+            data: SPlayChunkDataData::GroundUpContinuous(GroundUpContinuous {
+                sections: GroundUpNonContinuous {
+                    sections: Vec::new(),
+                },
+                biome_array: Box::new([[0; 16]; 16]),
+            }),
         }
     }
 }

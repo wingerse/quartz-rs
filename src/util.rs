@@ -1,7 +1,7 @@
-use std::time::Duration;
-use std::iter::Iterator;
-use std::collections::VecDeque;
 use std::any::Any;
+use std::collections::VecDeque;
+use std::iter::Iterator;
+use std::time::Duration;
 
 pub fn duration_total_ms(dur: Duration) -> f64 {
     let total_secs = dur.as_secs() as f64 + dur.subsec_nanos() as f64 / 1_000_000_000.0;
@@ -9,9 +9,10 @@ pub fn duration_total_ms(dur: Duration) -> f64 {
 }
 
 pub fn iter_foreach_every<I, F, P>(i: I, p: P, mut f: F)
-    where I: Iterator,
-          F: FnMut(&mut VecDeque<I::Item>),
-          P: Fn(usize) -> bool,
+where
+    I: Iterator,
+    F: FnMut(&mut VecDeque<I::Item>),
+    P: Fn(usize) -> bool,
 {
     let mut q = VecDeque::new();
     for (i, v) in i.enumerate() {
@@ -33,12 +34,4 @@ macro_rules! impl_from_for_newtype_enum {
             }
         }
     };
-}
-
-pub trait AsAny: Any {
-    fn as_any(&self) -> &Any;
-}
-
-impl<T: Any + Sized> AsAny for T {
-    fn as_any(&self) -> &Any { self }
 }

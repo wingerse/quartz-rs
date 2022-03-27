@@ -1,33 +1,40 @@
-pub mod item_stack;
 pub mod item_id;
+pub mod item_stack;
 //pub mod inventory;
 
-use std::fmt::Debug;
 use std::any::Any;
+use std::fmt::Debug;
 
-use crate::nbt;
-use crate::block::{Block, BlockStateId};
 use crate::block::block_entity::BlockEntity;
-use crate::util::AsAny;
+use crate::block::{Block, BlockStateId};
+use crate::nbt;
 
-pub trait Item: Debug + AsAny {
+pub trait Item: Debug {
     fn get_id(&self) -> u16;
     fn get_name(&self) -> &'static str;
-    fn get_damage_value(&self) -> i16 { 0 }
+    fn get_damage_value(&self) -> i16 {
+        0
+    }
     fn update_tag(&self, tag: &mut nbt::Compound) {}
 }
 
 #[derive(Debug)]
 pub struct BlockItem {
     pub id: BlockStateId,
-    pub block_entity: Option<Box<BlockEntity>>,
+    pub block_entity: Option<Box<dyn BlockEntity>>,
     pub can_place_on: Option<Vec<Block>>,
 }
 
 impl Item for BlockItem {
-    fn get_id(&self) -> u16 { self.id.get_type().to_u8() as u16 }
-    fn get_name(&self) -> &'static str { self.id.get_type().to_name() }
-    fn get_damage_value(&self) -> i16 { self.id.get_meta() as i16 }
+    fn get_id(&self) -> u16 {
+        self.id.get_type().to_u8() as u16
+    }
+    fn get_name(&self) -> &'static str {
+        self.id.get_type().to_name()
+    }
+    fn get_damage_value(&self) -> i16 {
+        self.id.get_meta() as i16
+    }
 
     fn update_tag(&self, tag: &mut nbt::Compound) {
         if let Some(ref can_place_on) = self.can_place_on {
@@ -38,7 +45,8 @@ impl Item for BlockItem {
             tag.0.insert("CanPlaceOn".into(), list.into());
         }
         if let Some(ref block_entity) = self.block_entity {
-            tag.0.insert("BlockEntityTag".into(), block_entity.to_nbt().into());
+            tag.0
+                .insert("BlockEntityTag".into(), block_entity.to_nbt().into());
         }
     }
 }

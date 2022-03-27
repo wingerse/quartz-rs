@@ -1,21 +1,21 @@
 pub mod block_entity;
-mod facing;
 mod block_pos;
 mod block_state_id;
+mod facing;
 
-pub use self::facing::Facing;
 pub use self::block_pos::BlockPos;
 pub use self::block_state_id::BlockStateId;
+pub use self::facing::Facing;
 
 use std::io::{self, Read, Write};
 
-use crate::binary;
-use crate::proto;
-use crate::sound::{self, Sound};
-use crate::item::item_id;
 use self::block_entity::BlockEntity;
+use crate::binary;
 use crate::entity::player::Player;
+use crate::item::item_id;
+use crate::proto;
 use crate::server::ServerContext;
+use crate::sound::{self, Sound};
 
 pub enum Air {}
 
@@ -616,7 +616,9 @@ pub enum Block {
 }
 
 impl Default for Block {
-    fn default() -> Self { Block::Air }
+    fn default() -> Self {
+        Block::Air
+    }
 }
 
 impl Block {
@@ -1439,75 +1441,219 @@ impl Block {
     }
 
     const STONE_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_STONE, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_STONE, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_STONE, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_STONE,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_STONE,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_STONE,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const WOOD_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_WOOD, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_WOOD, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_WOOD, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_WOOD,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_WOOD,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_WOOD,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const GRAVEL_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_GRAVEL, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_GRAVEL, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_GRAVEL, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_GRAVEL,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_GRAVEL,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_GRAVEL,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const GRASS_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_GRASS, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_GRASS, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_GRASS, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_GRASS,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_GRASS,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_GRASS,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const METAL_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_STONE, volume: 1.0, pitch: 1.5 },
-        step: Sound { name: sound::STEP_STONE, volume: 1.0, pitch: 1.5 },
-        place: Sound { name: sound::DIG_STONE, volume: 1.0, pitch: 1.5 },
+        breaks: Sound {
+            name: sound::DIG_STONE,
+            volume: 1.0,
+            pitch: 1.5,
+        },
+        step: Sound {
+            name: sound::STEP_STONE,
+            volume: 1.0,
+            pitch: 1.5,
+        },
+        place: Sound {
+            name: sound::DIG_STONE,
+            volume: 1.0,
+            pitch: 1.5,
+        },
     };
 
     const GLASS_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_GLASS, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_STONE, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_STONE, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_GLASS,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_STONE,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_STONE,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const CLOTH_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_CLOTH, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_CLOTH, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_CLOTH, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_CLOTH,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_CLOTH,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_CLOTH,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const SAND_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_SAND, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_SAND, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_SAND, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_SAND,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_SAND,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_SAND,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const SNOW_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_SNOW, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_SNOW, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_SNOW, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_SNOW,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_SNOW,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_SNOW,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const LADDER_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_WOOD, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_LADDER, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::DIG_WOOD, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_WOOD,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_LADDER,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::DIG_WOOD,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const ANVIL_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::DIG_STONE, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::STEP_ANVIL, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::RANDOM_ANVIL_LAND, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::DIG_STONE,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::STEP_ANVIL,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::RANDOM_ANVIL_LAND,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     const SLIME_SOUNDS: BlockSounds = BlockSounds {
-        breaks: Sound { name: sound::MOB_SLIME_BIG, volume: 1.0, pitch: 1.0 },
-        step: Sound { name: sound::MOB_SLIME_SMALL, volume: 1.0, pitch: 1.0 },
-        place: Sound { name: sound::MOB_SLIME_BIG, volume: 1.0, pitch: 1.0 },
+        breaks: Sound {
+            name: sound::MOB_SLIME_BIG,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        step: Sound {
+            name: sound::MOB_SLIME_SMALL,
+            volume: 1.0,
+            pitch: 1.0,
+        },
+        place: Sound {
+            name: sound::MOB_SLIME_BIG,
+            volume: 1.0,
+            pitch: 1.0,
+        },
     };
 
     pub fn get_sounds(&self) -> Option<BlockSounds> {
@@ -1714,7 +1860,7 @@ impl Block {
         }
     }
 
-    pub fn create_new_block_entity(&self) -> Option<Box<BlockEntity>> {
+    pub fn create_new_block_entity(&self) -> Option<Box<dyn BlockEntity>> {
         use self::Block::*;
         match *self {
             Furnace => Some(Box::new(block_entity::Furnace::default())),
