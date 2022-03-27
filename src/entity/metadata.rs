@@ -1,9 +1,9 @@
 use std::io::{self, Write};
 use std::collections::HashMap;
 
-use proto::data::SlotData;
-use binary;
-use proto::data;
+use crate::proto::data::SlotData;
+use crate::binary;
+use crate::proto::data;
 
 #[derive(Debug)]
 pub enum MetadataEntry {

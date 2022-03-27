@@ -5,10 +5,10 @@ pub mod item_id;
 use std::fmt::Debug;
 use std::any::Any;
 
-use nbt;
-use block::{Block, BlockStateId};
-use block::block_entity::BlockEntity;
-use util::AsAny;
+use crate::nbt;
+use crate::block::{Block, BlockStateId};
+use crate::block::block_entity::BlockEntity;
+use crate::util::AsAny;
 
 pub trait Item: Debug + AsAny {
     fn get_id(&self) -> u16;

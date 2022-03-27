@@ -1,13 +1,8 @@
 # Custom Minecraft 1.8 server
 
-To run, install rust, install rust nightly:  
+To run, install rust then run:
 
-    rustup toolchain install nightly
-
-Then run
-To run, install rust, switch to nightly, and then do:
-
-    cargo +nightly --release
+    cargo run --release
 
 Connect with `localhost:25565`
 

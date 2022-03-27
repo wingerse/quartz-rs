@@ -1,4 +1,4 @@
-use block::{Block};
+use crate::block::{Block};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct BlockStateId {

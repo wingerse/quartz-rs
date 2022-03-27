@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use item::Item;
-use nbt::{Compound, Nbt};
-use proto::data::SlotData;
+use crate::item::Item;
+use crate::nbt::{Compound, Nbt};
+use crate::proto::data::SlotData;
 
 #[derive(Debug)]
 pub struct ItemStack {

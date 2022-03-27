@@ -15,15 +15,15 @@ use std::cell::RefCell;
 use base64;
 use uuid::Uuid;
 
-use network::{self, NetworkServer};
-use entity::player::Player;
-use proto::packets::{SPacket, SPlayPlayerListItemData, SPlayPlayerListItemDataAction};
-use world::{Dimension, LevelType, World};
-use world::chunk::{ChunkPos, Chunk};
+use crate::network::{self, NetworkServer};
+use crate::entity::player::Player;
+use crate::proto::packets::{SPacket, SPlayPlayerListItemData, SPlayPlayerListItemDataAction};
+use crate::world::{Dimension, LevelType, World};
+use crate::world::chunk::{ChunkPos, Chunk};
 use self::playerlist::PlayerList;
-use text::{self, Code, ChatPos};
-use text::chat::{Chat, Component};
-use util;
+use crate::text::{self, Code, ChatPos};
+use crate::text::chat::{Chat, Component};
+use crate::util;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Gamemode {

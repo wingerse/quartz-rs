@@ -1,99 +1,51 @@
 mod banner_pattern;
 mod dye_color;
 
+use crate::item::item_id::PISTON;
+
 pub use self::banner_pattern::*;
 pub use self::dye_color::*;
 
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::any::{Any, TypeId};
 
-use uuid::Uuid;
 use serde_json;
+use uuid::Uuid;
 
-use entity::status_effect::StatusEffect;
-use item::item_stack::ItemStack;
-use block::{BlockPos, BlockStateId, Block, Facing};
-use text::chat::Chat;
-use nbt::{Compound, Tag, List, DeserializeError};
-use entity::player::PlayerProfile;
-use util::AsAny;
+use crate::block::{Block, BlockPos, BlockStateId, Facing};
+use crate::entity::player::PlayerProfile;
+use crate::entity::status_effect::StatusEffect;
+use crate::item::item_stack::ItemStack;
+use crate::nbt::{Compound, DeserializeError, List, Tag};
+use crate::text::chat::Chat;
+use crate::util::AsAny;
+
+const FURNACE_ID: &'static str = "Furnance";
+const CHEST_ID: &'static str = "Chest";
+const ENDER_CHEST_ID: &'static str = "EnderChest";
+const JUKEBOX_ID: &'static str = "RecordPlayer";
+const DISPENSER_ID: &'static str = "Trap";
+const DROPPER_ID: &'static str = "Dropper";
+const SIGN_ID: &'static str = "Sign";
+const MOB_SPAWNER_ID: &'static str = "MobSpawner";
+const NOTEBLOCK_ID: &'static str = "Music";
+const PISTON_ID: &'static str = "Piston";
+const BREWING_STAND_ID: &'static str = "Cauldron";
+const ENCHANTMENT_TABLE_ID: &'static str = "EnchantTable";
+const END_PORTAL_ID: &'static str = "Airportal";
+const COMMAND_BLOCK_ID: &'static str = "Control";
+const BEACON_ID: &'static str = "Beacon";
+const SKULL_ID: &'static str = "Skull";
+const DAYLIGHT_DETECTOR_ID: &'static str = "DLDetector";
+const HOPPER_ID: &'static str = "Hopper";
+const COMPARATOR_ID: &'static str = "Comparator";
+const FLOWER_POT_ID: &'static str = "FlowerPot";
+const BANNER_ID: &'static str = "Banner";
 
 pub trait BlockEntity: Debug + AsAny {
     fn to_nbt(&self) -> Compound;
-}
-
-impl BlockEntity {
-    const FURNACE_ID: &'static str = "Furnance";
-    const CHEST_ID: &'static str = "Chest";
-    const ENDER_CHEST_ID: &'static str = "EnderChest";
-    const JUKEBOX_ID: &'static str = "RecordPlayer";
-    const DISPENSER_ID: &'static str = "Trap";
-    const DROPPER_ID: &'static str = "Dropper";
-    const SIGN_ID: &'static str = "Sign";
-    const MOB_SPAWNER_ID: &'static str = "MobSpawner";
-    const NOTEBLOCK_ID: &'static str = "Music";
-    const PISTON_ID: &'static str = "Piston";
-    const BREWING_STAND_ID: &'static str = "Cauldron";
-    const ENCHANTMENT_TABLE_ID: &'static str = "EnchantTable";
-    const END_PORTAL_ID: &'static str = "Airportal";
-    const COMMAND_BLOCK_ID: &'static str = "Control";
-    const BEACON_ID: &'static str = "Beacon";
-    const SKULL_ID: &'static str = "Skull";
-    const DAYLIGHT_DETECTOR_ID: &'static str = "DLDetector";
-    const HOPPER_ID: &'static str = "Hopper";
-    const COMPARATOR_ID: &'static str = "Comparator";
-    const FLOWER_POT_ID: &'static str = "FlowerPot";
-    const BANNER_ID: &'static str = "Banner";
-
-    pub fn id(x: &BlockEntity) -> &'static str {
-        const FURNACE_TYPE_ID: TypeId = TypeId::of::<Furnace>();
-        const CHEST_TYPE_ID: TypeId = TypeId::of::<Chest>();
-        const ENDER_CHEST_TYPE_ID: TypeId = TypeId::of::<EnderChest>();
-        const JUKEBOX_TYPE_ID: TypeId = TypeId::of::<Jukebox>();
-        const DISPENSER_TYPE_ID: TypeId = TypeId::of::<Dispenser>();
-        const DROPPER_TYPE_ID: TypeId = TypeId::of::<Dropper>();
-        const SIGN_TYPE_ID: TypeId = TypeId::of::<Sign>();
-        const MOB_SPAWNER_TYPE_ID: TypeId = TypeId::of::<MobSpawner>();
-        const NOTEBLOCK_TYPE_ID: TypeId = TypeId::of::<Noteblock>();
-        const PISTON_TYPE_ID: TypeId = TypeId::of::<Piston>();
-        const BREWING_STAND_TYPE_ID: TypeId = TypeId::of::<BrewingStand>();
-        const ENCHANTMENT_TABLE_TYPE_ID: TypeId = TypeId::of::<EnchantmentTable>();
-        const END_PORTAL_TYPE_ID: TypeId = TypeId::of::<EndPortal>();
-        const COMMAND_BLOCK_TYPE_ID: TypeId = TypeId::of::<CommandBlock>();
-        const BEACON_TYPE_ID: TypeId = TypeId::of::<Beacon>();
-        const SKULL_TYPE_ID: TypeId = TypeId::of::<Skull>();
-        const DAYLIGHT_DETECTOR_TYPE_ID: TypeId = TypeId::of::<DaylightDetector>();
-        const HOPPER_TYPE_ID: TypeId = TypeId::of::<Hopper>();
-        const COMPARATOR_TYPE_ID: TypeId = TypeId::of::<Comparator>();
-        const FLOWER_POT_TYPE_ID: TypeId = TypeId::of::<FlowerPot>();
-        const BANNER_TYPE_ID: TypeId = TypeId::of::<Banner>();
-
-        match x.type_id() {
-            FURNACE_TYPE_ID => Self::FURNACE_ID,
-            CHEST_TYPE_ID => Self::CHEST_ID,
-            ENDER_CHEST_TYPE_ID => Self::ENDER_CHEST_ID,
-            JUKEBOX_TYPE_ID => Self::JUKEBOX_ID,
-            DISPENSER_TYPE_ID => Self::DISPENSER_ID,
-            DROPPER_TYPE_ID => Self::DROPPER_ID,
-            SIGN_TYPE_ID => Self::SIGN_ID,
-            MOB_SPAWNER_TYPE_ID => Self::MOB_SPAWNER_ID,
-            NOTEBLOCK_TYPE_ID => Self::NOTEBLOCK_ID,
-            PISTON_TYPE_ID => Self::PISTON_ID,
-            BREWING_STAND_TYPE_ID => Self::BREWING_STAND_ID,
-            ENCHANTMENT_TABLE_TYPE_ID => Self::ENCHANTMENT_TABLE_ID,
-            END_PORTAL_TYPE_ID => Self::END_PORTAL_ID,
-            COMMAND_BLOCK_TYPE_ID => Self::COMMAND_BLOCK_ID,
-            BEACON_TYPE_ID => Self::BEACON_ID,
-            SKULL_TYPE_ID => Self::SKULL_ID,
-            DAYLIGHT_DETECTOR_TYPE_ID => Self::DAYLIGHT_DETECTOR_ID,
-            HOPPER_TYPE_ID => Self::HOPPER_ID,
-            COMPARATOR_TYPE_ID => Self::COMPARATOR_ID,
-            FLOWER_POT_TYPE_ID => Self::FLOWER_POT_ID,
-            BANNER_TYPE_ID => Self::BANNER_ID,
-            _ => unreachable!(),
-        }
-    }
+    fn id(&self) -> &'static str;
 }
 
 #[derive(Debug, Default)]
@@ -105,7 +57,8 @@ pub struct ContainerHeader {
 impl ContainerHeader {
     fn update_nbt(&self, temp: &mut Compound) {
         if let Some(ref custom_name) = self.custom_name {
-            temp.0.insert("CustomName".into(), custom_name.clone().into());
+            temp.0
+                .insert("CustomName".into(), custom_name.clone().into());
         }
         if let Some(ref lock) = self.lock {
             temp.0.insert("Lock".into(), lock.clone().into());
@@ -115,10 +68,14 @@ impl ContainerHeader {
     fn from_nbt(compound: &mut Compound) -> Result<ContainerHeader, DeserializeError> {
         let custom_name = if compound.contains_key("CustomName") {
             Some(compound.get("CustomName")?.as_string()?.to_string())
-        } else { None };
+        } else {
+            None
+        };
         let lock = if compound.contains_key("Lock") {
             Some(compound.get("Lock")?.as_string()?.to_string())
-        } else { None };
+        } else {
+            None
+        };
         Ok(ContainerHeader { custom_name, lock })
     }
 }
@@ -140,7 +97,9 @@ impl BlockEntity for Furnace {
         self.header.update_nbt(&mut compound);
         compound.0.insert("BurnTime".into(), self.burn_time.into());
         compound.0.insert("CookTime".into(), self.cook_time.into());
-        compound.0.insert("CookTimeTotal".into(), self.cook_time_total.into());
+        compound
+            .0
+            .insert("CookTimeTotal".into(), self.cook_time_total.into());
         let mut items = List(Vec::new());
         if let Some(ref smelting_item) = self.smelting_item {
             items.0.push(smelting_item.to_nbt_with_slot(0).into());
@@ -152,6 +111,10 @@ impl BlockEntity for Furnace {
             items.0.push(result.to_nbt_with_slot(2).into());
         }
         compound
+    }
+
+    fn id(&self) -> &'static str {
+        FURNACE_ID
     }
 }
 
@@ -174,13 +137,23 @@ impl BlockEntity for Chest {
         compound.0.insert("Items".into(), list.into());
         compound
     }
+
+    fn id(&self) -> &'static str {
+        CHEST_ID
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct EnderChest;
 
 impl BlockEntity for EnderChest {
-    fn to_nbt(&self) -> Compound { Compound(HashMap::new()) }
+    fn to_nbt(&self) -> Compound {
+        Compound(HashMap::new())
+    }
+
+    fn id(&self) -> &'static str {
+        ENDER_CHEST_ID
+    }
 }
 
 #[derive(Debug, Default)]
@@ -192,9 +165,15 @@ impl BlockEntity for Jukebox {
     fn to_nbt(&self) -> Compound {
         let mut compound = Compound(HashMap::new());
         if let Some(ref record) = self.record {
-            compound.0.insert("RecordItem".into(), record.to_nbt().into());
+            compound
+                .0
+                .insert("RecordItem".into(), record.to_nbt().into());
         }
         compound
+    }
+
+    fn id(&self) -> &'static str {
+        JUKEBOX_ID
     }
 }
 
@@ -216,6 +195,10 @@ impl BlockEntity for Dispenser {
         com.0.insert("Items".into(), items.into());
         com
     }
+
+    fn id(&self) -> &'static str {
+        DISPENSER_ID
+    }
 }
 
 #[derive(Debug, Default)]
@@ -224,6 +207,10 @@ pub struct Dropper(Dispenser);
 impl BlockEntity for Dropper {
     fn to_nbt(&self) -> Compound {
         self.0.to_nbt()
+    }
+
+    fn id(&self) -> &'static str {
+        DROPPER_ID
     }
 }
 
@@ -238,11 +225,27 @@ pub struct Sign {
 impl BlockEntity for Sign {
     fn to_nbt(&self) -> Compound {
         let mut com = Compound(HashMap::new());
-        com.0.insert("Text1".into(), serde_json::to_string(&self.text1).unwrap().into());
-        com.0.insert("Text2".into(), serde_json::to_string(&self.text2).unwrap().into());
-        com.0.insert("Text3".into(), serde_json::to_string(&self.text3).unwrap().into());
-        com.0.insert("Text4".into(), serde_json::to_string(&self.text4).unwrap().into());
+        com.0.insert(
+            "Text1".into(),
+            serde_json::to_string(&self.text1).unwrap().into(),
+        );
+        com.0.insert(
+            "Text2".into(),
+            serde_json::to_string(&self.text2).unwrap().into(),
+        );
+        com.0.insert(
+            "Text3".into(),
+            serde_json::to_string(&self.text3).unwrap().into(),
+        );
+        com.0.insert(
+            "Text4".into(),
+            serde_json::to_string(&self.text4).unwrap().into(),
+        );
         com
+    }
+
+    fn id(&self) -> &'static str {
+        SIGN_ID
     }
 }
 
@@ -263,6 +266,10 @@ impl BlockEntity for MobSpawner {
         com.0.insert("SpawnRange".into(), 4i16.into());
         com
     }
+
+    fn id(&self) -> &'static str {
+        MOB_SPAWNER_ID
+    }
 }
 
 #[derive(Debug, Default)]
@@ -275,6 +282,10 @@ impl BlockEntity for Noteblock {
         let mut com = Compound(HashMap::new());
         com.0.insert("note".into(), self.note.into());
         com
+    }
+
+    fn id(&self) -> &'static str {
+        NOTEBLOCK_ID
     }
 }
 
@@ -289,12 +300,21 @@ pub struct Piston {
 impl BlockEntity for Piston {
     fn to_nbt(&self) -> Compound {
         let mut com = Compound(HashMap::new());
-        com.0.insert("blockId".into(), (self.block.get_type().to_u8() as i32).into());
-        com.0.insert("blockData".into(), (self.block.get_meta() as i32).into());
-        com.0.insert("facing".into(), (self.facing.to_i8() as i32).into());
+        com.0.insert(
+            "blockId".into(),
+            (self.block.get_type().to_u8() as i32).into(),
+        );
+        com.0
+            .insert("blockData".into(), (self.block.get_meta() as i32).into());
+        com.0
+            .insert("facing".into(), (self.facing.to_i8() as i32).into());
         com.0.insert("progress".into(), self.progress.into());
         com.0.insert("extending".into(), self.extending.into());
         com
+    }
+
+    fn id(&self) -> &'static str {
+        PISTON_ID
     }
 }
 
@@ -329,6 +349,10 @@ impl BlockEntity for BrewingStand {
         com.0.insert("Items".into(), items.into());
         com
     }
+
+    fn id(&self) -> &'static str {
+        BREWING_STAND_ID
+    }
 }
 
 #[derive(Debug, Default)]
@@ -340,9 +364,14 @@ impl BlockEntity for EnchantmentTable {
     fn to_nbt(&self) -> Compound {
         let mut com = Compound(HashMap::new());
         if let Some(ref custom_name) = self.custom_name {
-            com.0.insert("CustomName".into(), custom_name.clone().into());
+            com.0
+                .insert("CustomName".into(), custom_name.clone().into());
         }
         com
+    }
+
+    fn id(&self) -> &'static str {
+        ENCHANTMENT_TABLE_ID
     }
 }
 
@@ -350,7 +379,13 @@ impl BlockEntity for EnchantmentTable {
 pub struct EndPortal;
 
 impl BlockEntity for EndPortal {
-    fn to_nbt(&self) -> Compound { Compound(HashMap::new()) }
+    fn to_nbt(&self) -> Compound {
+        Compound(HashMap::new())
+    }
+
+    fn id(&self) -> &'static str {
+        END_PORTAL_ID
+    }
 }
 
 #[derive(Debug, Default)]
@@ -365,6 +400,10 @@ impl BlockEntity for CommandBlock {
         com.0.insert("TrackOutput".into(), 1i8.into());
         com
     }
+
+    fn id(&self) -> &'static str {
+        COMMAND_BLOCK_ID
+    }
 }
 
 #[derive(Debug)]
@@ -377,7 +416,12 @@ pub struct Beacon {
 
 impl Default for Beacon {
     fn default() -> Self {
-        Beacon { lock: None, primary: None, secondary: None, levels: -1 }
+        Beacon {
+            lock: None,
+            primary: None,
+            secondary: None,
+            levels: -1,
+        }
     }
 }
 
@@ -396,6 +440,10 @@ impl BlockEntity for Beacon {
         com.0.insert("Levels".into(), self.levels.into());
         com
     }
+
+    fn id(&self) -> &'static str {
+        BEACON_ID
+    }
 }
 
 #[derive(Debug, Default)]
@@ -412,13 +460,20 @@ impl BlockEntity for Skull {
         com.0.insert("Rot".into(), self.rot.into());
         if let Some(ref profile) = self.profile {
             let mut properties = Compound(HashMap::new());
-            properties.0.insert("Id".into(), profile.id.0.simple().to_string().into());
-            properties.0.insert("Name".into(), profile.name.clone().into());
+            properties
+                .0
+                .insert("Id".into(), profile.id.0.simple().to_string().into());
+            properties
+                .0
+                .insert("Name".into(), profile.name.clone().into());
             let mut textures = List(Vec::new());
             for p in &profile.properties {
                 if p.name == "textures" {
                     let mut entry = Compound(HashMap::new());
-                    entry.0.insert("Value".into(), serde_json::to_string(&p.value).unwrap().into());
+                    entry.0.insert(
+                        "Value".into(),
+                        serde_json::to_string(&p.value).unwrap().into(),
+                    );
                     break;
                 }
             }
@@ -427,13 +482,23 @@ impl BlockEntity for Skull {
         }
         com
     }
+
+    fn id(&self) -> &'static str {
+        SKULL_ID
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct DaylightDetector;
 
 impl BlockEntity for DaylightDetector {
-    fn to_nbt(&self) -> Compound { Compound(HashMap::new()) }
+    fn to_nbt(&self) -> Compound {
+        Compound(HashMap::new())
+    }
+
+    fn id(&self) -> &'static str {
+        DAYLIGHT_DETECTOR_ID
+    }
 }
 
 #[derive(Debug, Default)]
@@ -454,8 +519,14 @@ impl BlockEntity for Hopper {
             }
         }
         compound.0.insert("Items".into(), list.into());
-        compound.0.insert("TransferCooldown".into(), self.transfer_cooldown.into());
         compound
+            .0
+            .insert("TransferCooldown".into(), self.transfer_cooldown.into());
+        compound
+    }
+
+    fn id(&self) -> &'static str {
+        HOPPER_ID
     }
 }
 
@@ -467,8 +538,13 @@ pub struct Comparator {
 impl BlockEntity for Comparator {
     fn to_nbt(&self) -> Compound {
         let mut com = Compound(HashMap::new());
-        com.0.insert("OutputSignal".into(), self.output_signal.into());
+        com.0
+            .insert("OutputSignal".into(), self.output_signal.into());
         com
+    }
+
+    fn id(&self) -> &'static str {
+        COMPARATOR_ID
     }
 }
 
@@ -480,9 +556,17 @@ pub struct FlowerPot {
 impl BlockEntity for FlowerPot {
     fn to_nbt(&self) -> Compound {
         let mut com = Compound(HashMap::new());
-        com.0.insert("Item".into(), self.item.get_type().to_name().to_string().into());
-        com.0.insert("Data".into(), (self.item.get_meta() as i32).into());
+        com.0.insert(
+            "Item".into(),
+            self.item.get_type().to_name().to_string().into(),
+        );
+        com.0
+            .insert("Data".into(), (self.item.get_meta() as i32).into());
         com
+    }
+
+    fn id(&self) -> &'static str {
+        FLOWER_POT_ID
     }
 }
 
@@ -500,10 +584,15 @@ impl BlockEntity for Banner {
         for (color, pattern) in &self.patterns {
             let mut temp = Compound(HashMap::new());
             temp.0.insert("Color".into(), color.to_i32().into());
-            temp.0.insert("Pattern".into(), pattern.to_name().to_string().into());
+            temp.0
+                .insert("Pattern".into(), pattern.to_name().to_string().into());
             patterns.0.push(temp.into());
         }
         com.0.insert("Patterns".into(), patterns.into());
         com
+    }
+
+    fn id(&self) -> &'static str {
+        BANNER_ID
     }
 }

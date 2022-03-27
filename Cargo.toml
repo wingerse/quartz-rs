@@ -2,6 +2,7 @@
 name = "quartz-rs"
 version = "0.1.0"
 authors = ["wingerse <aiman012@live.com>"]
+#edition = "2021"
 
 [dependencies]
 byteorder = "1.2.1"

@@ -1,19 +1,19 @@
 pub mod chunk;
 pub mod world_properties;
 
-use std::iter::Filter;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
+use std::iter::Filter;
 
 use uuid::Uuid;
 
 use self::chunk::{Chunk, ChunkPos};
 use self::world_properties::WorldProperties;
-use block::BlockStateId;
-use math::Vec3;
-use proto;
-use binary;
-use block::BlockPos;
+use crate::binary;
+use crate::block::BlockPos;
+use crate::block::BlockStateId;
+use crate::math::Vec3;
+use crate::proto;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LevelType {
@@ -51,7 +51,11 @@ pub struct World {
 
 impl World {
     pub fn new(dimension: Dimension) -> World {
-        World { chunks: HashMap::new(), properties: WorldProperties::new(dimension), spawn_pos: BlockPos::ZERO }
+        World {
+            chunks: HashMap::new(),
+            properties: WorldProperties::new(dimension),
+            spawn_pos: BlockPos::ZERO,
+        }
     }
 
     pub fn get_spawn_pos(&self) -> BlockPos {
@@ -73,7 +77,10 @@ impl World {
             let (x, y, z) = pos.to_relative_chunk_pos();
             c.set_block(x, y, z, block);
         } else {
-            panic!("tried setting block at pos ({}) when the chunk is not loaded");
+            panic!(
+                "tried setting block at pos ({:?}) when the chunk is not loaded",
+                pos
+            );
         }
     }
 
@@ -99,7 +106,9 @@ impl World {
             } else {
                 false
             }
-        } else { false };
+        } else {
+            false
+        };
 
         if unload {
             self.chunks.remove(&pos);
@@ -145,13 +154,14 @@ impl ChunkRectangle {
     }
 
     pub fn centered(center: ChunkPos, radius: u8) -> ChunkRectangle {
-        ChunkRectangle::new(ChunkPos::new(center.x - radius as i32, center.z - radius as i32),
-                            ChunkPos::new(center.x + radius as i32, center.z + radius as i32))
+        ChunkRectangle::new(
+            ChunkPos::new(center.x - radius as i32, center.z - radius as i32),
+            ChunkPos::new(center.x + radius as i32, center.z + radius as i32),
+        )
     }
 
     pub fn contains(&self, pos: ChunkPos) -> bool {
-        pos.x >= self.min.x && pos.x <= self.max.x &&
-            pos.z >= self.min.z && pos.z <= self.max.z
+        pos.x >= self.min.x && pos.x <= self.max.x && pos.z >= self.min.z && pos.z <= self.max.z
     }
 
     pub fn chunks_iter(&self) -> ChunksIter {
@@ -159,7 +169,7 @@ impl ChunkRectangle {
     }
 
     /// Return an iterator of chunk pos present in self, but not `other`
-    pub fn subtract_iter(self, other: ChunkRectangle) -> impl Iterator<Item=ChunkPos> {
+    pub fn subtract_iter(self, other: ChunkRectangle) -> impl Iterator<Item = ChunkPos> {
         self.chunks_iter().filter(move |&p| !other.contains(p))
     }
 }
@@ -172,7 +182,11 @@ pub struct ChunksIter {
 
 impl ChunksIter {
     fn new(rect: ChunkRectangle) -> ChunksIter {
-        ChunksIter { rect, x: rect.min.x, z: rect.min.z }
+        ChunksIter {
+            rect,
+            x: rect.min.x,
+            z: rect.min.z,
+        }
     }
 }
 

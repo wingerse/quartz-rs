@@ -6,8 +6,8 @@ use std::cell::{RefCell, RefMut};
 
 use uuid::Uuid;
 
-use entity::player::Player;
-use proto::packets::SPacket;
+use crate::entity::player::Player;
+use crate::proto::packets::SPacket;
 
 /// List of players in the server. This allows you to get by name and uuid.
 /// # Important

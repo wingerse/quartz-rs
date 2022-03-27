@@ -11,7 +11,7 @@ use flate2::write::ZlibEncoder;
 use flate2::read::ZlibDecoder;
 use flate2::Compression;
 
-use binary;
+use crate::binary;
 use self::packets::{SPacket, CPacket};
 
 pub const VERSION: i32 = 47;

@@ -1,8 +1,8 @@
 use noise::{Perlin, NoiseFn};
 
-use world::chunk::{ChunkPos, Chunk};
-use block::{BlockStateId, Block};
-use world::Dimension;
+use crate::world::chunk::{ChunkPos, Chunk};
+use crate::block::{BlockStateId, Block};
+use crate::world::Dimension;
 
 /// perlin adjusted for range 0 to 1 instead of -1 to 1
 fn perlin(x: f64, z: f64) -> f64 {

@@ -1,22 +1,21 @@
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::rc::Rc;
-use std::collections::HashMap;
-use std::sync::mpsc::{self, Sender, Receiver};
-use std::thread::{self, JoinHandle};
-use std::collections::HashSet;
-use std::error::Error as StdError;
+use std::{
+    collections::HashSet,
+    thread::{self, JoinHandle},
+};
 
-use uuid::{self, Uuid};
 use failure::Fail;
+use uuid::{self, Uuid};
 
-use proto::{self, Reader, State, Writer};
-use proto::packets::*;
-use text;
-use text::chat::{Chat, Component, StringComponent};
-use entity::player::Player;
-use proto::packets::SStatusResponsePlayer;
+use crate::entity::player::Player;
+use crate::proto::packets::SStatusResponsePlayer;
+use crate::proto::packets::*;
+use crate::proto::{self, Reader, State, Writer};
+use crate::text;
+use crate::text::chat::{Chat, Component, StringComponent};
 
 #[derive(Fail, Debug)]
 pub enum Error {
@@ -25,7 +24,9 @@ pub enum Error {
 }
 
 impl From<io::Error> for Error {
-    fn from(x: io::Error) -> Self { Error::IOError(x) }
+    fn from(x: io::Error) -> Self {
+        Error::IOError(x)
+    }
 }
 
 pub struct NetworkServer {
@@ -70,7 +71,13 @@ impl NetworkServer {
                 println!("{} has connected", addr);
                 // TODO: async io
                 thread::spawn(move || {
-                    if let Err(e) = NetworkServer::handle_client(&stream, addr, favicon, incoming_players, player_list) {
+                    if let Err(e) = NetworkServer::handle_client(
+                        &stream,
+                        addr,
+                        favicon,
+                        incoming_players,
+                        player_list,
+                    ) {
                         println!("{} has been disconnected for error: {:?}", addr, e);
                     }
                 });
@@ -100,7 +107,7 @@ impl NetworkServer {
                     NetworkServer::handle_login(reader, writer, addr, player_list, incoming_players)
                 }
             }
-            _ => unreachable!() // reader is in handshake state so only handshake can be read.
+            _ => unreachable!(), // reader is in handshake state so only handshake can be read.
         }
     }
 
@@ -180,12 +187,16 @@ impl NetworkServer {
 
                 // check if player is already logged in
                 if player_list.lock().unwrap().contains(&response_player) {
-                    writer.write_packet(&SPacket::LoginDisconnect {reason: Chat::from(text::parse_legacy("You are already logged in"))})?;
+                    writer.write_packet(&SPacket::LoginDisconnect {
+                        reason: Chat::from(text::parse_legacy("You are already logged in")),
+                    })?;
                     return Ok(());
                 }
 
                 const THRESHOLD: u32 = 256;
-                writer.write_packet(&SPacket::LoginSetCompression { threshold: THRESHOLD as i32 })?;
+                writer.write_packet(&SPacket::LoginSetCompression {
+                    threshold: THRESHOLD as i32,
+                })?;
                 reader.set_compression(THRESHOLD);
                 writer.set_compression(THRESHOLD);
 
@@ -198,13 +209,28 @@ impl NetworkServer {
                 let (client_sender, client_receiver) = mpsc::channel();
 
                 let connected = Arc::new(Mutex::new(true));
-                let mut player = Player::new(name, uuid, server_sender, client_receiver, addr, Arc::clone(&connected));
+                let mut player = Player::new(
+                    name,
+                    uuid,
+                    server_sender,
+                    client_receiver,
+                    addr,
+                    Arc::clone(&connected),
+                );
 
                 player_list.lock().unwrap().insert(response_player.clone());
 
                 incoming_players.send(player).unwrap();
 
-                NetworkServer::handle_play(reader, writer, connected, client_sender, server_receiver, response_player, player_list)
+                NetworkServer::handle_play(
+                    reader,
+                    writer,
+                    connected,
+                    client_sender,
+                    server_receiver,
+                    response_player,
+                    player_list,
+                )
             }
             _ => {
                 return Err(proto::Error::UnexpectedPacket {
@@ -231,7 +257,10 @@ impl NetworkServer {
         player_list: Arc<Mutex<HashSet<SStatusResponsePlayer>>>,
     ) -> Result<(), proto::Error> {
         reader.set_state(State::Play);
-        let _player_guard = PlayerGuard {player_list, player}; // remove player from player_list when returning from this function
+        let _player_guard = PlayerGuard {
+            player_list,
+            player,
+        }; // remove player from player_list when returning from this function
 
         let connected_s = Arc::clone(&connected);
         // loop for packet sending.
@@ -242,15 +271,15 @@ impl NetworkServer {
                     Ok(p) => {
                         if let Err(e) = writer.write_packet(&p) {
                             *connected_s.lock().unwrap() = false;
-/*                            // normal disconnect
+                            /*                            // normal disconnect
                             if e.kind() == io::ErrorKind::ConnectionAborted {
                                 break;
                             }*/
 
-                            return Err(From::from(e))
+                            return Err(From::from(e));
                         }
                     }
-                    Err(_) => break,// send side is dropped when player is deallocated. That's gonna happen after player sets connected to false.
+                    Err(_) => break, // send side is dropped when player is deallocated. That's gonna happen after player sets connected to false.
                 }
             }
 

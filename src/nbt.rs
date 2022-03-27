@@ -3,7 +3,7 @@ use std::error::Error as StdError;
 use std::io::{self, Read, Write};
 use std::string::FromUtf8Error;
 
-use binary;
+use crate::binary;
 
 #[derive(Debug, Fail)]
 pub enum Error {

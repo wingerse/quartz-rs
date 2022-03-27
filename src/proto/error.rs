@@ -1,10 +1,10 @@
-use binary;
-use nbt;
+use crate::binary;
+use crate::nbt;
 use std::error::Error as StdError;
 use std::io;
 use std::string::FromUtf8Error;
-use proto::MAX_PACKET_LEN;
-use text::chat;
+use crate::proto::MAX_PACKET_LEN;
+use crate::text::chat;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 

@@ -3,10 +3,10 @@ use std::io::{self, BufRead, Read, Write};
 
 use uuid;
 
-use binary;
-use nbt::Nbt;
-use proto::Result;
-use world::chunk::CHUNK_SECTION_BLOCK_COUNT;
+use crate::binary;
+use crate::nbt::Nbt;
+use crate::proto::Result;
+use crate::world::chunk::CHUNK_SECTION_BLOCK_COUNT;
 
 pub fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
     binary::write_varint(w, s.len() as i32)?;

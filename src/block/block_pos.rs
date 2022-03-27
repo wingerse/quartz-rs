@@ -1,7 +1,7 @@
 use std::io::{self, Write, Read};
 
-use binary;
-use proto;
+use crate::binary;
+use crate::proto;
 
 use super::Facing;
 

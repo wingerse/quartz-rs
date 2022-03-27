@@ -9,13 +9,13 @@ pub use self::block_state_id::BlockStateId;
 
 use std::io::{self, Read, Write};
 
-use binary;
-use proto;
-use sound::{self, Sound};
-use item::item_id;
+use crate::binary;
+use crate::proto;
+use crate::sound::{self, Sound};
+use crate::item::item_id;
 use self::block_entity::BlockEntity;
-use entity::player::Player;
-use server::ServerContext;
+use crate::entity::player::Player;
+use crate::server::ServerContext;
 
 pub enum Air {}
 

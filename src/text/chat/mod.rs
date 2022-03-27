@@ -1,10 +1,10 @@
-use proto;
+use crate::proto;
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json;
 use std::convert::From;
 use std::fmt;
 use std::io;
-use text::Code;
+use crate::text::Code;
 
 mod color;
 

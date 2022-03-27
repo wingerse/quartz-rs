@@ -6,14 +6,14 @@ use std::collections::HashSet;
 use serde_json;
 use uuid::Uuid;
 
-use binary::*;
-use nbt::Nbt;
-use proto::{data, Error, Result, State};
-use entity::metadata::EntityMetadata;
-use text;
-use text::chat::Chat;
-use block::BlockPos;
-use sound::Sound;
+use crate::binary::*;
+use crate::nbt::Nbt;
+use crate::proto::{data, Error, Result, State};
+use crate::entity::metadata::EntityMetadata;
+use crate::text;
+use crate::text::chat::Chat;
+use crate::block::BlockPos;
+use crate::sound::Sound;
 
 #[derive(Debug)]
 pub enum CPacket {

@@ -1,6 +1,6 @@
 use std::iter::Iterator;
-use text::{Code, Token, Tokenizer, LEGACY_CHAR};
-use text::chat::{Component, StringComponent, Wrapper, Chat};
+use crate::text::{Code, Token, Tokenizer, LEGACY_CHAR};
+use crate::text::chat::{Component, StringComponent, Wrapper, Chat};
 
 fn strip_codes(codes: &[Code]) -> &[Code] {
     for (i, c) in codes.iter().enumerate() {

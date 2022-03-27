@@ -2,12 +2,12 @@ use std::collections::{HashSet, HashMap};
 
 use uuid::Uuid;
 
-use collections::{NibbleArray, VarbitArray};
-use proto::data::{self, GroundUpContinuous, GroundUpNonContinuous};
-use proto::packets::{SPacket, SPlayChunkDataData, SPlayMapChunkBulkData};
-use math::Vec3;
-use block::{BlockPos, BlockStateId, Block};
-use block::block_entity::BlockEntity;
+use crate::collections::{NibbleArray, VarbitArray};
+use crate::proto::data::{self, GroundUpContinuous, GroundUpNonContinuous};
+use crate::proto::packets::{SPacket, SPlayChunkDataData, SPlayMapChunkBulkData};
+use crate::math::Vec3;
+use crate::block::{BlockPos, BlockStateId, Block};
+use crate::block::block_entity::BlockEntity;
 
 pub const CHUNK_SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
 
